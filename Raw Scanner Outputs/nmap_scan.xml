@@ -1,0 +1,533 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.94SVN scan initiated Tue Mar 17 07:36:29 2026 as: nmap -sV -p- -&#45;script vuln -oX /tmp/nmap_scan.xml 127.0.0.1 -->
+<nmaprun scanner="nmap" args="nmap -sV -p- -&#45;script vuln -oX /tmp/nmap_scan.xml 127.0.0.1" start="1773732989" startstr="Tue Mar 17 07:36:29 2026" version="7.94SVN" xmloutputversion="1.05">
+<scaninfo type="syn" protocol="tcp" numservices="65535" services="1-65535"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<host starttime="1773732999" endtime="1773733533"><status state="up" reason="localhost-response" reason_ttl="0"/>
+<address addr="127.0.0.1" addrtype="ipv4"/>
+<hostnames>
+<hostname name="localhost" type="PTR"/>
+</hostnames>
+<ports><extraports state="closed" count="65533">
+<extrareasons reason="reset" count="65533" proto="tcp" ports="1-21,23-8887,8889-65535"/>
+</extraports>
+<port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ssh" product="OpenSSH" version="9.6p1 Ubuntu 3ubuntu13.15" extrainfo="Ubuntu Linux; protocol 2.0" ostype="Linux" method="probed" conf="10"><cpe>cpe:/a:openbsd:openssh:9.6p1</cpe><cpe>cpe:/o:linux:linux_kernel</cpe></service><script id="vulners" output="&#xa;  cpe:/a:openbsd:openssh:9.6p1: &#xa;    &#x9;PACKETSTORM:179290&#x9;10.0&#x9;https://vulners.com/packetstorm/PACKETSTORM:179290&#x9;*EXPLOIT*&#xa;    &#x9;1EEC8894-D2F7-547C-827C-915BE866875C&#x9;10.0&#x9;https://vulners.com/githubexploit/1EEC8894-D2F7-547C-827C-915BE866875C&#x9;*EXPLOIT*&#xa;    &#x9;33D623F7-98E0-5F75-80FA-81AA666D1340&#x9;9.8&#x9;https://vulners.com/githubexploit/33D623F7-98E0-5F75-80FA-81AA666D1340&#x9;*EXPLOIT*&#xa;    &#x9;F8981437-1287-5B69-93F1-657DFB1DCE59&#x9;9.3&#x9;https://vulners.com/githubexploit/F8981437-1287-5B69-93F1-657DFB1DCE59&#x9;*EXPLOIT*&#xa;    &#x9;CB2926E1-2355-5C82-A42A-D4F72F114F9B&#x9;9.3&#x9;https://vulners.com/githubexploit/CB2926E1-2355-5C82-A42A-D4F72F114F9B&#x9;*EXPLOIT*&#xa;    &#x9;8DEE261C-33D4-5057-BA46-E4293B705BAE&#x9;9.3&#x9;https://vulners.com/githubexploit/8DEE261C-33D4-5057-BA46-E4293B705BAE&#x9;*EXPLOIT*&#xa;    &#x9;6FD8F914-B663-533D-8866-23313FD37804&#x9;9.3&#x9;https://vulners.com/githubexploit/6FD8F914-B663-533D-8866-23313FD37804&#x9;*EXPLOIT*&#xa;    &#x9;PACKETSTORM:190587&#x9;8.1&#x9;https://vulners.com/packetstorm/PACKETSTORM:190587&#x9;*EXPLOIT*&#xa;    &#x9;FB2E9ED1-43D7-585C-A197-0D6628B20134&#x9;8.1&#x9;https://vulners.com/githubexploit/FB2E9ED1-43D7-585C-A197-0D6628B20134&#x9;*EXPLOIT*&#xa;    &#x9;FA3992CE-9C4C-5350-8134-177126E0BD3F&#x9;8.1&#x9;https://vulners.com/githubexploit/FA3992CE-9C4C-5350-8134-177126E0BD3F&#x9;*EXPLOIT*&#xa;    &#x9;EFD615F0-8F17-5471-AA83-0F491FD497AF&#x9;8.1&#x9;https://vulners.com/githubexploit/EFD615F0-8F17-5471-AA83-0F491FD497AF&#x9;*EXPLOIT*&#xa;    &#x9;EC20B9C2-6857-5848-848A-A9F430D13EEB&#x9;8.1&#x9;https://vulners.com/githubexploit/EC20B9C2-6857-5848-848A-A9F430D13EEB&#x9;*EXPLOIT*&#xa;    &#x9;EB13CBD6-BC93-5F14-A210-AC0B5A1D8572&#x9;8.1&#x9;https://vulners.com/githubexploit/EB13CBD6-BC93-5F14-A210-AC0B5A1D8572&#x9;*EXPLOIT*&#xa;    &#x9;E543E274-C20A-582A-8F8E-F8E3F381C345&#x9;8.1&#x9;https://vulners.com/githubexploit/E543E274-C20A-582A-8F8E-F8E3F381C345&#x9;*EXPLOIT*&#xa;    &#x9;E34FCCEC-226E-5A46-9B1C-BCD6EF7D3257&#x9;8.1&#x9;https://vulners.com/githubexploit/E34FCCEC-226E-5A46-9B1C-BCD6EF7D3257&#x9;*EXPLOIT*&#xa;    &#x9;E24EEC0A-40F7-5BBC-9E4D-7B13522FF915&#x9;8.1&#x9;https://vulners.com/githubexploit/E24EEC0A-40F7-5BBC-9E4D-7B13522FF915&#x9;*EXPLOIT*&#xa;    &#x9;DC1BB99A-8B57-5EE5-9AC4-3D9D59BFC346&#x9;8.1&#x9;https://vulners.com/githubexploit/DC1BB99A-8B57-5EE5-9AC4-3D9D59BFC346&#x9;*EXPLOIT*&#xa;    &#x9;DA18D761-BB81-54B6-85CB-CFD73CE33621&#x9;8.1&#x9;https://vulners.com/githubexploit/DA18D761-BB81-54B6-85CB-CFD73CE33621&#x9;*EXPLOIT*&#xa;    &#x9;D8974199-6B08-5895-9610-919F71468F23&#x9;8.1&#x9;https://vulners.com/githubexploit/D8974199-6B08-5895-9610-919F71468F23&#x9;*EXPLOIT*&#xa;    &#x9;D52370EF-02EE-507D-9212-2D8EA86CBA94&#x9;8.1&#x9;https://vulners.com/githubexploit/D52370EF-02EE-507D-9212-2D8EA86CBA94&#x9;*EXPLOIT*&#xa;    &#x9;CVE-2024-6387&#x9;8.1&#x9;https://vulners.com/cve/CVE-2024-6387&#xa;    &#x9;CFEBF7AF-651A-5302-80B8-F8146D5B33A6&#x9;8.1&#x9;https://vulners.com/githubexploit/CFEBF7AF-651A-5302-80B8-F8146D5B33A6&#x9;*EXPLOIT*&#xa;    &#x9;C6FB6D50-F71D-5870-B671-D6A09A95627F&#x9;8.1&#x9;https://vulners.com/githubexploit/C6FB6D50-F71D-5870-B671-D6A09A95627F&#x9;*EXPLOIT*&#xa;    &#x9;C623D558-C162-5D17-88A5-4799A2BEC001&#x9;8.1&#x9;https://vulners.com/githubexploit/C623D558-C162-5D17-88A5-4799A2BEC001&#x9;*EXPLOIT*&#xa;    &#x9;C5B2D4A1-8C3B-5FF7-B620-EDE207B027A0&#x9;8.1&#x9;https://vulners.com/githubexploit/C5B2D4A1-8C3B-5FF7-B620-EDE207B027A0&#x9;*EXPLOIT*&#xa;    &#x9;C185263E-3E67-5550-B9C0-AB9C15351960&#x9;8.1&#x9;https://vulners.com/githubexploit/C185263E-3E67-5550-B9C0-AB9C15351960&#x9;*EXPLOIT*&#xa;    &#x9;BDA609DA-6936-50DC-A325-19FE2CC68562&#x9;8.1&#x9;https://vulners.com/githubexploit/BDA609DA-6936-50DC-A325-19FE2CC68562&#x9;*EXPLOIT*&#xa;    &#x9;BA3887BD-F579-53B1-A4A4-FF49E953E1C0&#x9;8.1&#x9;https://vulners.com/githubexploit/BA3887BD-F579-53B1-A4A4-FF49E953E1C0&#x9;*EXPLOIT*&#xa;    &#x9;B1F444E0-F217-5FC0-B266-EBD48589940F&#x9;8.1&#x9;https://vulners.com/githubexploit/B1F444E0-F217-5FC0-B266-EBD48589940F&#x9;*EXPLOIT*&#xa;    &#x9;92254168-3B26-54C9-B9BE-B4B7563586B5&#x9;8.1&#x9;https://vulners.com/githubexploit/92254168-3B26-54C9-B9BE-B4B7563586B5&#x9;*EXPLOIT*&#xa;    &#x9;91752937-D1C1-5913-A96F-72F8B8AB4280&#x9;8.1&#x9;https://vulners.com/githubexploit/91752937-D1C1-5913-A96F-72F8B8AB4280&#x9;*EXPLOIT*&#xa;    &#x9;90104C60-A887-5437-8521-545277685F55&#x9;8.1&#x9;https://vulners.com/githubexploit/90104C60-A887-5437-8521-545277685F55&#x9;*EXPLOIT*&#xa;    &#x9;89F96BAB-1624-51B5-B09E-E771D918D1E6&#x9;8.1&#x9;https://vulners.com/githubexploit/89F96BAB-1624-51B5-B09E-E771D918D1E6&#x9;*EXPLOIT*&#xa;    &#x9;81F0C05A-8650-5DE8-97E9-0D89F1807E5D&#x9;8.1&#x9;https://vulners.com/githubexploit/81F0C05A-8650-5DE8-97E9-0D89F1807E5D&#x9;*EXPLOIT*&#xa;    &#x9;7C7167AF-E780-5506-BEFA-02E5362E8E48&#x9;8.1&#x9;https://vulners.com/githubexploit/7C7167AF-E780-5506-BEFA-02E5362E8E48&#x9;*EXPLOIT*&#xa;    &#x9;79FE1ED7-EB3D-5978-A12E-AAB1FFECCCAC&#x9;8.1&#x9;https://vulners.com/githubexploit/79FE1ED7-EB3D-5978-A12E-AAB1FFECCCAC&#x9;*EXPLOIT*&#xa;    &#x9;795762E3-BAB4-54C6-B677-83B0ACC2B163&#x9;8.1&#x9;https://vulners.com/githubexploit/795762E3-BAB4-54C6-B677-83B0ACC2B163&#x9;*EXPLOIT*&#xa;    &#x9;774022BB-71DA-57C4-9B8F-E21D667DE4BC&#x9;8.1&#x9;https://vulners.com/githubexploit/774022BB-71DA-57C4-9B8F-E21D667DE4BC&#x9;*EXPLOIT*&#xa;    &#x9;743E5025-3BB8-5EC4-AC44-2AA679730661&#x9;8.1&#x9;https://vulners.com/githubexploit/743E5025-3BB8-5EC4-AC44-2AA679730661&#x9;*EXPLOIT*&#xa;    &#x9;73A19EF9-346D-5B2B-9792-05D9FE3414E2&#x9;8.1&#x9;https://vulners.com/githubexploit/73A19EF9-346D-5B2B-9792-05D9FE3414E2&#x9;*EXPLOIT*&#xa;    &#x9;6E81EAE5-2156-5ACB-9046-D792C7FAF698&#x9;8.1&#x9;https://vulners.com/githubexploit/6E81EAE5-2156-5ACB-9046-D792C7FAF698&#x9;*EXPLOIT*&#xa;    &#x9;6B78D204-22B0-5D11-8A0C-6313958B473F&#x9;8.1&#x9;https://vulners.com/githubexploit/6B78D204-22B0-5D11-8A0C-6313958B473F&#x9;*EXPLOIT*&#xa;    &#x9;65650BAD-813A-565D-953D-2E7932B26094&#x9;8.1&#x9;https://vulners.com/githubexploit/65650BAD-813A-565D-953D-2E7932B26094&#x9;*EXPLOIT*&#xa;    &#x9;649197A2-0224-5B5C-9C4E-B5791D42A9FB&#x9;8.1&#x9;https://vulners.com/githubexploit/649197A2-0224-5B5C-9C4E-B5791D42A9FB&#x9;*EXPLOIT*&#xa;    &#x9;61DDEEE4-2146-5E84-9804-B780AA73E33C&#x9;8.1&#x9;https://vulners.com/githubexploit/61DDEEE4-2146-5E84-9804-B780AA73E33C&#x9;*EXPLOIT*&#xa;    &#x9;608FA50C-AEA1-5A83-8297-A15FC7D32A7C&#x9;8.1&#x9;https://vulners.com/githubexploit/608FA50C-AEA1-5A83-8297-A15FC7D32A7C&#x9;*EXPLOIT*&#xa;    &#x9;5D2CB1F8-DC04-5545-8BC7-29EE3DA8890E&#x9;8.1&#x9;https://vulners.com/githubexploit/5D2CB1F8-DC04-5545-8BC7-29EE3DA8890E&#x9;*EXPLOIT*&#xa;    &#x9;5C81C5C1-22D4-55B3-B843-5A9A60AAB6FD&#x9;8.1&#x9;https://vulners.com/githubexploit/5C81C5C1-22D4-55B3-B843-5A9A60AAB6FD&#x9;*EXPLOIT*&#xa;    &#x9;53BCD84F-BD22-5C9D-95B6-4B83627AB37F&#x9;8.1&#x9;https://vulners.com/githubexploit/53BCD84F-BD22-5C9D-95B6-4B83627AB37F&#x9;*EXPLOIT*&#xa;    &#x9;4FB01B00-F993-5CAF-BD57-D7E290D10C1F&#x9;8.1&#x9;https://vulners.com/githubexploit/4FB01B00-F993-5CAF-BD57-D7E290D10C1F&#x9;*EXPLOIT*&#xa;    &#x9;48603E8F-B170-57EE-85B9-67A7D9504891&#x9;8.1&#x9;https://vulners.com/githubexploit/48603E8F-B170-57EE-85B9-67A7D9504891&#x9;*EXPLOIT*&#xa;    &#x9;4748B283-C2F6-5924-8241-342F98EEC2EE&#x9;8.1&#x9;https://vulners.com/githubexploit/4748B283-C2F6-5924-8241-342F98EEC2EE&#x9;*EXPLOIT*&#xa;    &#x9;452ADB71-199C-561E-B949-FCDE6288B925&#x9;8.1&#x9;https://vulners.com/githubexploit/452ADB71-199C-561E-B949-FCDE6288B925&#x9;*EXPLOIT*&#xa;    &#x9;331B2B7F-FB25-55DB-B7A4-602E42448DB7&#x9;8.1&#x9;https://vulners.com/githubexploit/331B2B7F-FB25-55DB-B7A4-602E42448DB7&#x9;*EXPLOIT*&#xa;    &#x9;1FFDA397-F480-5C74-90F3-060E1FE11B2E&#x9;8.1&#x9;https://vulners.com/githubexploit/1FFDA397-F480-5C74-90F3-060E1FE11B2E&#x9;*EXPLOIT*&#xa;    &#x9;1FA2B3DD-FC8F-5602-A1C9-2CF3F9536563&#x9;8.1&#x9;https://vulners.com/githubexploit/1FA2B3DD-FC8F-5602-A1C9-2CF3F9536563&#x9;*EXPLOIT*&#xa;    &#x9;1F7A6000-9E6D-511C-B0F6-7CADB7200761&#x9;8.1&#x9;https://vulners.com/githubexploit/1F7A6000-9E6D-511C-B0F6-7CADB7200761&#x9;*EXPLOIT*&#xa;    &#x9;1CF00BB8-B891-5347-A2DC-2C6A6BFF7C99&#x9;8.1&#x9;https://vulners.com/githubexploit/1CF00BB8-B891-5347-A2DC-2C6A6BFF7C99&#x9;*EXPLOIT*&#xa;    &#x9;1AB9F1F4-9798-59A0-9213-1D907E81E7F6&#x9;8.1&#x9;https://vulners.com/githubexploit/1AB9F1F4-9798-59A0-9213-1D907E81E7F6&#x9;*EXPLOIT*&#xa;    &#x9;179F72B6-5619-52B5-A040-72F1ECE6CDD8&#x9;8.1&#x9;https://vulners.com/githubexploit/179F72B6-5619-52B5-A040-72F1ECE6CDD8&#x9;*EXPLOIT*&#xa;    &#x9;15C36683-070A-5CC1-B21F-5F0BF974D9D3&#x9;8.1&#x9;https://vulners.com/githubexploit/15C36683-070A-5CC1-B21F-5F0BF974D9D3&#x9;*EXPLOIT*&#xa;    &#x9;1337DAY-ID-39674&#x9;8.1&#x9;https://vulners.com/zdt/1337DAY-ID-39674&#x9;*EXPLOIT*&#xa;    &#x9;11F020AC-F907-5606-8805-0516E06160EE&#x9;8.1&#x9;https://vulners.com/githubexploit/11F020AC-F907-5606-8805-0516E06160EE&#x9;*EXPLOIT*&#xa;    &#x9;0FC4BE81-312B-51F4-9D9B-66D8B5C093CD&#x9;8.1&#x9;https://vulners.com/githubexploit/0FC4BE81-312B-51F4-9D9B-66D8B5C093CD&#x9;*EXPLOIT*&#xa;    &#x9;0B165049-2374-5E2A-A27C-008BEA3D13F7&#x9;8.1&#x9;https://vulners.com/githubexploit/0B165049-2374-5E2A-A27C-008BEA3D13F7&#x9;*EXPLOIT*&#xa;    &#x9;08144020-2B5F-5EB9-9286-1ABD5477278E&#x9;8.1&#x9;https://vulners.com/githubexploit/08144020-2B5F-5EB9-9286-1ABD5477278E&#x9;*EXPLOIT*&#xa;    &#x9;CVE-2024-39894&#x9;7.5&#x9;https://vulners.com/cve/CVE-2024-39894&#xa;    &#x9;PACKETSTORM:189283&#x9;6.8&#x9;https://vulners.com/packetstorm/PACKETSTORM:189283&#x9;*EXPLOIT*&#xa;    &#x9;CVE-2025-26465&#x9;6.8&#x9;https://vulners.com/cve/CVE-2025-26465&#xa;    &#x9;9D8432B9-49EC-5F45-BB96-329B1F2B2254&#x9;6.8&#x9;https://vulners.com/githubexploit/9D8432B9-49EC-5F45-BB96-329B1F2B2254&#x9;*EXPLOIT*&#xa;    &#x9;85FCDCC6-9A03-597E-AB4F-FA4DAC04F8D0&#x9;6.8&#x9;https://vulners.com/githubexploit/85FCDCC6-9A03-597E-AB4F-FA4DAC04F8D0&#x9;*EXPLOIT*&#xa;    &#x9;1337DAY-ID-39918&#x9;6.8&#x9;https://vulners.com/zdt/1337DAY-ID-39918&#x9;*EXPLOIT*&#xa;    &#x9;CVE-2025-26466&#x9;5.9&#x9;https://vulners.com/cve/CVE-2025-26466&#xa;    &#x9;CVE-2025-32728&#x9;4.3&#x9;https://vulners.com/cve/CVE-2025-32728&#xa;    &#x9;CVE-2025-61985&#x9;3.6&#x9;https://vulners.com/cve/CVE-2025-61985&#xa;    &#x9;CVE-2025-61984&#x9;3.6&#x9;https://vulners.com/cve/CVE-2025-61984&#xa;    &#x9;B7EACB4F-A5CF-5C5A-809F-E03CCE2AB150&#x9;3.6&#x9;https://vulners.com/githubexploit/B7EACB4F-A5CF-5C5A-809F-E03CCE2AB150&#x9;*EXPLOIT*&#xa;    &#x9;4C6E2182-0E99-5626-83F6-1646DD648C57&#x9;3.6&#x9;https://vulners.com/githubexploit/4C6E2182-0E99-5626-83F6-1646DD648C57&#x9;*EXPLOIT*"><table key="cpe:/a:openbsd:openssh:9.6p1">
+<table>
+<elem key="type">packetstorm</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">PACKETSTORM:179290</elem>
+<elem key="cvss">10.0</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1EEC8894-D2F7-547C-827C-915BE866875C</elem>
+<elem key="cvss">10.0</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">33D623F7-98E0-5F75-80FA-81AA666D1340</elem>
+<elem key="cvss">9.8</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">F8981437-1287-5B69-93F1-657DFB1DCE59</elem>
+<elem key="cvss">9.3</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">CB2926E1-2355-5C82-A42A-D4F72F114F9B</elem>
+<elem key="cvss">9.3</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">8DEE261C-33D4-5057-BA46-E4293B705BAE</elem>
+<elem key="cvss">9.3</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">6FD8F914-B663-533D-8866-23313FD37804</elem>
+<elem key="cvss">9.3</elem>
+</table>
+<table>
+<elem key="type">packetstorm</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">PACKETSTORM:190587</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">FB2E9ED1-43D7-585C-A197-0D6628B20134</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">FA3992CE-9C4C-5350-8134-177126E0BD3F</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">EFD615F0-8F17-5471-AA83-0F491FD497AF</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">EC20B9C2-6857-5848-848A-A9F430D13EEB</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">EB13CBD6-BC93-5F14-A210-AC0B5A1D8572</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">E543E274-C20A-582A-8F8E-F8E3F381C345</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">E34FCCEC-226E-5A46-9B1C-BCD6EF7D3257</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">E24EEC0A-40F7-5BBC-9E4D-7B13522FF915</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">DC1BB99A-8B57-5EE5-9AC4-3D9D59BFC346</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">DA18D761-BB81-54B6-85CB-CFD73CE33621</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">D8974199-6B08-5895-9610-919F71468F23</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">D52370EF-02EE-507D-9212-2D8EA86CBA94</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2024-6387</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">CFEBF7AF-651A-5302-80B8-F8146D5B33A6</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">C6FB6D50-F71D-5870-B671-D6A09A95627F</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">C623D558-C162-5D17-88A5-4799A2BEC001</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">C5B2D4A1-8C3B-5FF7-B620-EDE207B027A0</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">C185263E-3E67-5550-B9C0-AB9C15351960</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">BDA609DA-6936-50DC-A325-19FE2CC68562</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">BA3887BD-F579-53B1-A4A4-FF49E953E1C0</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">B1F444E0-F217-5FC0-B266-EBD48589940F</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">92254168-3B26-54C9-B9BE-B4B7563586B5</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">91752937-D1C1-5913-A96F-72F8B8AB4280</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">90104C60-A887-5437-8521-545277685F55</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">89F96BAB-1624-51B5-B09E-E771D918D1E6</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">81F0C05A-8650-5DE8-97E9-0D89F1807E5D</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">7C7167AF-E780-5506-BEFA-02E5362E8E48</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">79FE1ED7-EB3D-5978-A12E-AAB1FFECCCAC</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">795762E3-BAB4-54C6-B677-83B0ACC2B163</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">774022BB-71DA-57C4-9B8F-E21D667DE4BC</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">743E5025-3BB8-5EC4-AC44-2AA679730661</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">73A19EF9-346D-5B2B-9792-05D9FE3414E2</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">6E81EAE5-2156-5ACB-9046-D792C7FAF698</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">6B78D204-22B0-5D11-8A0C-6313958B473F</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">65650BAD-813A-565D-953D-2E7932B26094</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">649197A2-0224-5B5C-9C4E-B5791D42A9FB</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">61DDEEE4-2146-5E84-9804-B780AA73E33C</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">608FA50C-AEA1-5A83-8297-A15FC7D32A7C</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">5D2CB1F8-DC04-5545-8BC7-29EE3DA8890E</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">5C81C5C1-22D4-55B3-B843-5A9A60AAB6FD</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">53BCD84F-BD22-5C9D-95B6-4B83627AB37F</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">4FB01B00-F993-5CAF-BD57-D7E290D10C1F</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">48603E8F-B170-57EE-85B9-67A7D9504891</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">4748B283-C2F6-5924-8241-342F98EEC2EE</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">452ADB71-199C-561E-B949-FCDE6288B925</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">331B2B7F-FB25-55DB-B7A4-602E42448DB7</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1FFDA397-F480-5C74-90F3-060E1FE11B2E</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1FA2B3DD-FC8F-5602-A1C9-2CF3F9536563</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1F7A6000-9E6D-511C-B0F6-7CADB7200761</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1CF00BB8-B891-5347-A2DC-2C6A6BFF7C99</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1AB9F1F4-9798-59A0-9213-1D907E81E7F6</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">179F72B6-5619-52B5-A040-72F1ECE6CDD8</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">15C36683-070A-5CC1-B21F-5F0BF974D9D3</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">zdt</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1337DAY-ID-39674</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">11F020AC-F907-5606-8805-0516E06160EE</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">0FC4BE81-312B-51F4-9D9B-66D8B5C093CD</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">0B165049-2374-5E2A-A27C-008BEA3D13F7</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">08144020-2B5F-5EB9-9286-1ABD5477278E</elem>
+<elem key="cvss">8.1</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2024-39894</elem>
+<elem key="cvss">7.5</elem>
+</table>
+<table>
+<elem key="type">packetstorm</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">PACKETSTORM:189283</elem>
+<elem key="cvss">6.8</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2025-26465</elem>
+<elem key="cvss">6.8</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">9D8432B9-49EC-5F45-BB96-329B1F2B2254</elem>
+<elem key="cvss">6.8</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">85FCDCC6-9A03-597E-AB4F-FA4DAC04F8D0</elem>
+<elem key="cvss">6.8</elem>
+</table>
+<table>
+<elem key="type">zdt</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">1337DAY-ID-39918</elem>
+<elem key="cvss">6.8</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2025-26466</elem>
+<elem key="cvss">5.9</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2025-32728</elem>
+<elem key="cvss">4.3</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2025-61985</elem>
+<elem key="cvss">3.6</elem>
+</table>
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2025-61984</elem>
+<elem key="cvss">3.6</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">B7EACB4F-A5CF-5C5A-809F-E03CCE2AB150</elem>
+<elem key="cvss">3.6</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">4C6E2182-0E99-5626-83F6-1646DD648C57</elem>
+<elem key="cvss">3.6</elem>
+</table>
+</table>
+</script></port>
+<port protocol="tcp" portid="8888"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http-proxy" product="tinyproxy" version="1.11.1" method="probed" conf="10"><cpe>cpe:/a:banu:tinyproxy:1.11.1</cpe></service><script id="http-server-header" output="tinyproxy/1.11.1"><elem>tinyproxy/1.11.1</elem>
+</script><script id="vulners" output="&#xa;  tinyproxy 1.11.1: &#xa;    &#x9;CVE-2023-49606&#x9;9.8&#x9;https://vulners.com/cve/CVE-2023-49606&#xa;    &#x9;C5F671F9-1EF1-59FC-86C2-7980FEF75607&#x9;9.8&#x9;https://vulners.com/githubexploit/C5F671F9-1EF1-59FC-86C2-7980FEF75607&#x9;*EXPLOIT*"><table key="tinyproxy 1.11.1">
+<table>
+<elem key="type">cve</elem>
+<elem key="is_exploit">false</elem>
+<elem key="id">CVE-2023-49606</elem>
+<elem key="cvss">9.8</elem>
+</table>
+<table>
+<elem key="type">githubexploit</elem>
+<elem key="is_exploit">true</elem>
+<elem key="id">C5F671F9-1EF1-59FC-86C2-7980FEF75607</elem>
+<elem key="cvss">9.8</elem>
+</table>
+</table>
+</script><script id="http-slowloris-check" output="&#xa;  VULNERABLE:&#xa;  Slowloris DOS attack&#xa;    State: LIKELY VULNERABLE&#xa;    IDs:  CVE:CVE-2007-6750&#xa;      Slowloris tries to keep many connections to the target web server open and hold&#xa;      them open as long as possible.  It accomplishes this by opening connections to&#xa;      the target web server and sending a partial request. By doing so, it starves&#xa;      the http server&apos;s resources causing Denial Of Service.&#xa;      &#xa;    Disclosure date: 2009-09-17&#xa;    References:&#xa;      http://ha.ckers.org/slowloris/&#xa;      https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2007-6750&#xa;"><table key="CVE-2007-6750">
+<elem key="title">Slowloris DOS attack</elem>
+<elem key="state">LIKELY VULNERABLE</elem>
+<table key="ids">
+<elem>CVE:CVE-2007-6750</elem>
+</table>
+<table key="description">
+<elem>Slowloris tries to keep many connections to the target web server open and hold&#xa;them open as long as possible.  It accomplishes this by opening connections to&#xa;the target web server and sending a partial request. By doing so, it starves&#xa;the http server&apos;s resources causing Denial Of Service.&#xa;</elem>
+</table>
+<table key="dates">
+<table key="disclosure">
+<elem key="year">2009</elem>
+<elem key="day">17</elem>
+<elem key="month">09</elem>
+</table>
+</table>
+<elem key="disclosure">2009-09-17</elem>
+<table key="exploit_results">
+</table>
+<table key="refs">
+<elem>http://ha.ckers.org/slowloris/</elem>
+<elem>https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2007-6750</elem>
+</table>
+</table>
+</script></port>
+</ports>
+<times srtt="3" rttvar="0" to="100000"/>
+</host>
+<runstats><finished time="1773733533" timestr="Tue Mar 17 07:45:33 2026" summary="Nmap done at Tue Mar 17 07:45:33 2026; 1 IP address (1 host up) scanned in 543.66 seconds" elapsed="543.66" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

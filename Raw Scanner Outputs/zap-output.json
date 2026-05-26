@@ -1,0 +1,851 @@
+{
+	"@programName": "ZAP",
+	"@version": "2.17.0",
+	"@generated": "Thu, 26 Mar 2026 16:30:46",
+	"created": "2026-03-26T16:30:46.880727460Z",
+	"insights":[
+		{
+			"level": "Low",
+			"reason": "Warning",
+			"site": "",
+			"key": "insight.log.error",
+			"description": "ZAP errors logged - see the zap.log file for details",
+			"statistic": "2"
+		},
+		{
+			"level": "Low",
+			"reason": "Warning",
+			"site": "",
+			"key": "insight.log.warn",
+			"description": "ZAP warnings logged - see the zap.log file for details",
+			"statistic": "6"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.code.2xx",
+			"description": "Percentage of responses with status code 2xx",
+			"statistic": "86"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.code.3xx",
+			"description": "Percentage of responses with status code 3xx",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.code.4xx",
+			"description": "Percentage of responses with status code 4xx",
+			"statistic": "9"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.application/javascript",
+			"description": "Percentage of endpoints with content type application/javascript",
+			"statistic": "7"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.application/pdf",
+			"description": "Percentage of endpoints with content type application/pdf",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.image/png",
+			"description": "Percentage of endpoints with content type image/png",
+			"statistic": "15"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.image/vnd.microsoft.icon",
+			"description": "Percentage of endpoints with content type image/vnd.microsoft.icon",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.text/css",
+			"description": "Percentage of endpoints with content type text/css",
+			"statistic": "7"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.text/html",
+			"description": "Percentage of endpoints with content type text/html",
+			"statistic": "57"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.ctype.text/plain",
+			"description": "Percentage of endpoints with content type text/plain",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.method.GET",
+			"description": "Percentage of endpoints with method GET",
+			"statistic": "92"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.method.POST",
+			"description": "Percentage of endpoints with method POST",
+			"statistic": "7"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "http://localhost:8080",
+			"key": "insight.endpoint.total",
+			"description": "Count of total endpoints",
+			"statistic": "26"
+		}
+	],
+	"site":[ 
+		{
+			"@name": "http://localhost:8080",
+			"@host": "localhost",
+			"@port": "8080",
+			"@ssl": "false",
+			"alerts": [ 
+				{
+					"pluginid": "40018",
+					"alertRef": "40018",
+					"alert": "SQL Injection",
+					"name": "SQL Injection",
+					"riskcode": "3",
+					"confidence": "2",
+					"riskdesc": "High (Medium)",
+					"desc": "<p>SQL injection may be possible.</p>",
+					"instances":[ 
+						{
+							"id": "84",
+							"uri": "http://localhost:8080/setup.php",
+							"nodeName": "http:\/\/localhost:8080\/setup.php ()(create_db,user_token)",
+							"method": "POST",
+							"param": "create_db",
+							"attack": "Create / Reset Database AND 1=1 -- ",
+							"evidence": "",
+							"otherinfo": "The page results were successfully manipulated using the boolean conditions [Create / Reset Database AND 1=1 -- ] and [Create / Reset Database AND 1=2 -- ]\nThe parameter value being modified was stripped from the HTML output for the purposes of the comparison.\nData was returned for the original parameter.\nThe vulnerability was detected by successfully restricting the data originally returned, by manipulating the parameter."
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>Do not trust client side input, even if there is client side validation in place.</p><p>In general, type check all data on the server side.</p><p>If the application uses JDBC, use PreparedStatement or CallableStatement, with parameters passed by '?'</p><p>If the application uses ASP, use ADO Command Objects with strong type checking and parameterized queries.</p><p>If database Stored Procedures can be used, use them.</p><p>Do *not* concatenate strings into queries in the stored procedure, or use 'exec', 'exec immediate', or equivalent functionality!</p><p>Do not create dynamic SQL queries using simple string concatenation.</p><p>Escape all data received from the client.</p><p>Apply an 'allow list' of allowed characters, or a 'deny list' of disallowed characters in user input.</p><p>Apply the principle of least privilege by using the least privileged database user possible.</p><p>In particular, avoid using the 'sa' or 'db-owner' database users. This does not eliminate SQL injection, but minimizes its impact.</p><p>Grant the minimum database access that is necessary for the application.</p>",
+					"otherinfo": "<p>The page results were successfully manipulated using the boolean conditions [Create / Reset Database AND 1=1 -- ] and [Create / Reset Database AND 1=2 -- ]</p><p>The parameter value being modified was stripped from the HTML output for the purposes of the comparison.</p><p>Data was returned for the original parameter.</p><p>The vulnerability was detected by successfully restricting the data originally returned, by manipulating the parameter.</p>",
+					"reference": "<p>https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html</p>",
+					"cweid": "89",
+					"wascid": "19",
+					"sourceid": "74"
+				},
+				{
+					"pluginid": "10038",
+					"alertRef": "10038-1",
+					"alert": "Content Security Policy (CSP) Header Not Set",
+					"name": "Content Security Policy (CSP) Header Not Set",
+					"riskcode": "2",
+					"confidence": "3",
+					"riskdesc": "Medium (High)",
+					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
+					"instances":[ 
+						{
+							"id": "1",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "35",
+							"uri": "http://localhost:8080/about.php",
+							"nodeName": "http:\/\/localhost:8080\/about.php",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "22",
+							"uri": "http://localhost:8080/login.php",
+							"nodeName": "http:\/\/localhost:8080\/login.php",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "32",
+							"uri": "http://localhost:8080/setup.php",
+							"nodeName": "http:\/\/localhost:8080\/setup.php",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "7",
+							"uri": "http://localhost:8080/sitemap.xml",
+							"nodeName": "http:\/\/localhost:8080\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP</p><p>https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html</p><p>https://www.w3.org/TR/CSP/</p><p>https://w3c.github.io/webappsec-csp/</p><p>https://web.dev/articles/csp</p><p>https://caniuse.com/#feat=contentsecuritypolicy</p><p>https://content-security-policy.com/</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "1"
+				},
+				{
+					"pluginid": "0",
+					"alertRef": "0",
+					"alert": "Directory Browsing",
+					"name": "Directory Browsing",
+					"riskcode": "2",
+					"confidence": "2",
+					"riskdesc": "Medium (Medium)",
+					"desc": "<p>It is possible to view the directory listing. Directory listing may reveal hidden scripts, include files, backup source files, etc. which can be accessed to read sensitive information.</p>",
+					"instances":[ 
+						{
+							"id": "85",
+							"uri": "http://localhost:8080/docs/",
+							"nodeName": "http:\/\/localhost:8080\/docs\/",
+							"method": "GET",
+							"param": "",
+							"attack": "http://localhost:8080/docs/",
+							"evidence": "Parent Directory",
+							"otherinfo": ""
+						},
+						{
+							"id": "86",
+							"uri": "http://localhost:8080/dvwa/",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/",
+							"method": "GET",
+							"param": "",
+							"attack": "http://localhost:8080/dvwa/",
+							"evidence": "Parent Directory",
+							"otherinfo": ""
+						},
+						{
+							"id": "87",
+							"uri": "http://localhost:8080/dvwa/css/",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/css\/",
+							"method": "GET",
+							"param": "",
+							"attack": "http://localhost:8080/dvwa/css/",
+							"evidence": "Parent Directory",
+							"otherinfo": ""
+						},
+						{
+							"id": "88",
+							"uri": "http://localhost:8080/dvwa/images/",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/images\/",
+							"method": "GET",
+							"param": "",
+							"attack": "http://localhost:8080/dvwa/images/",
+							"evidence": "Parent Directory",
+							"otherinfo": ""
+						},
+						{
+							"id": "89",
+							"uri": "http://localhost:8080/dvwa/js/",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/js\/",
+							"method": "GET",
+							"param": "",
+							"attack": "http://localhost:8080/dvwa/js/",
+							"evidence": "Parent Directory",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Disable directory browsing. If this is required, make sure the listed files does not induce risks.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://httpd.apache.org/docs/current/mod/core.html#options</p>",
+					"cweid": "548",
+					"wascid": "48",
+					"sourceid": "75"
+				},
+				{
+					"pluginid": "10020",
+					"alertRef": "10020-1",
+					"alert": "Missing Anti-clickjacking Header",
+					"name": "Missing Anti-clickjacking Header",
+					"riskcode": "2",
+					"confidence": "2",
+					"riskdesc": "Medium (Medium)",
+					"desc": "<p>The response does not protect against 'ClickJacking' attacks. It should include either Content-Security-Policy with 'frame-ancestors' directive or X-Frame-Options.</p>",
+					"instances":[ 
+						{
+							"id": "0",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "x-frame-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "33",
+							"uri": "http://localhost:8080/about.php",
+							"nodeName": "http:\/\/localhost:8080\/about.php",
+							"method": "GET",
+							"param": "x-frame-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "40",
+							"uri": "http://localhost:8080/instructions.php",
+							"nodeName": "http:\/\/localhost:8080\/instructions.php",
+							"method": "GET",
+							"param": "x-frame-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "20",
+							"uri": "http://localhost:8080/login.php",
+							"nodeName": "http:\/\/localhost:8080\/login.php",
+							"method": "GET",
+							"param": "x-frame-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "30",
+							"uri": "http://localhost:8080/setup.php",
+							"nodeName": "http:\/\/localhost:8080\/setup.php",
+							"method": "GET",
+							"param": "x-frame-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Modern Web browsers support the Content-Security-Policy and X-Frame-Options HTTP headers. Ensure one of them is set on all web pages returned by your site/app.</p><p>If you expect the page to be framed only by pages on your server (e.g. it's part of a FRAMESET) then you'll want to use SAMEORIGIN, otherwise if you never expect the page to be framed, you should use DENY. Alternatively consider implementing Content Security Policy's \"frame-ancestors\" directive.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Frame-Options</p>",
+					"cweid": "1021",
+					"wascid": "15",
+					"sourceid": "1"
+				},
+				{
+					"pluginid": "10010",
+					"alertRef": "10010",
+					"alert": "Cookie No HttpOnly Flag",
+					"name": "Cookie No HttpOnly Flag",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>A cookie has been set without the HttpOnly flag, which means that the cookie can be accessed by JavaScript. If a malicious script can be run on this page then the cookie will be accessible and can be transmitted to another site. If this is a session cookie then session hijacking may be possible.</p>",
+					"instances":[ 
+						{
+							"id": "10",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "PHPSESSID",
+							"attack": "",
+							"evidence": "Set-Cookie: PHPSESSID",
+							"otherinfo": ""
+						},
+						{
+							"id": "12",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "security",
+							"attack": "",
+							"evidence": "Set-Cookie: security",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": true,
+					"solution": "<p>Ensure that the HttpOnly flag is set for all cookies.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://owasp.org/www-community/HttpOnly</p>",
+					"cweid": "1004",
+					"wascid": "13",
+					"sourceid": "7"
+				},
+				{
+					"pluginid": "10054",
+					"alertRef": "10054-1",
+					"alert": "Cookie without SameSite Attribute",
+					"name": "Cookie without SameSite Attribute",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>A cookie has been set without the SameSite attribute, which means that the cookie can be sent as a result of a 'cross-site' request. The SameSite attribute is an effective counter measure to cross-site request forgery, cross-site script inclusion, and timing attacks.</p>",
+					"instances":[ 
+						{
+							"id": "14",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "PHPSESSID",
+							"attack": "",
+							"evidence": "Set-Cookie: PHPSESSID",
+							"otherinfo": ""
+						},
+						{
+							"id": "16",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "security",
+							"attack": "",
+							"evidence": "Set-Cookie: security",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": true,
+					"solution": "<p>Ensure that the SameSite attribute is set to either 'lax' or ideally 'strict' for all cookies.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-cookie-same-site</p>",
+					"cweid": "1275",
+					"wascid": "13",
+					"sourceid": "7"
+				},
+				{
+					"pluginid": "10009",
+					"alertRef": "10009",
+					"alert": "In Page Banner Information Leak",
+					"name": "In Page Banner Information Leak",
+					"riskcode": "1",
+					"confidence": "3",
+					"riskdesc": "Low (High)",
+					"desc": "<p>The server returned a version banner string in the response content. Such information leaks may allow attackers to further target specific issues impacting the product and version in use.</p>",
+					"instances":[ 
+						{
+							"id": "9",
+							"uri": "http://localhost:8080/sitemap.xml",
+							"nodeName": "http:\/\/localhost:8080\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25",
+							"otherinfo": "There is a chance that the highlight in the finding is on a value in the headers, versus the actual matched string in the response body."
+						},
+						{
+							"id": "71",
+							"uri": "http://localhost:8080/var/www/html/config/config.inc.php",
+							"nodeName": "http:\/\/localhost:8080\/var\/www\/html\/config\/config.inc.php",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25",
+							"otherinfo": "There is a chance that the highlight in the finding is on a value in the headers, versus the actual matched string in the response body."
+						}
+					],
+					"count": "2",
+					"systemic": true,
+					"solution": "<p>Configure the server to prevent such information leaks. For example:</p><p>Under Tomcat this is done via the \"server\" directive and implementation of custom error pages.</p><p>Under Apache this is done via the \"ServerSignature\" and \"ServerTokens\" directives.</p>",
+					"otherinfo": "<p>There is a chance that the highlight in the finding is on a value in the headers, versus the actual matched string in the response body.</p>",
+					"reference": "<p>https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/</p>",
+					"cweid": "497",
+					"wascid": "13",
+					"sourceid": "8"
+				},
+				{
+					"pluginid": "10023",
+					"alertRef": "10023",
+					"alert": "Information Disclosure - Debug Error Messages",
+					"name": "Information Disclosure - Debug Error Messages",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>The response appeared to contain common error messages returned by platforms such as ASP.NET, and Web-servers such as IIS and Apache. You can configure the list of common debug messages.</p>",
+					"instances":[ 
+						{
+							"id": "46",
+							"uri": "http://localhost:8080/instructions.php",
+							"nodeName": "http:\/\/localhost:8080\/instructions.php",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "PHP warning",
+							"otherinfo": ""
+						},
+						{
+							"id": "64",
+							"uri": "http://localhost:8080/instructions.php?doc=readme",
+							"nodeName": "http:\/\/localhost:8080\/instructions.php (doc)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "PHP warning",
+							"otherinfo": ""
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>Disable debugging messages before pushing to production.</p>",
+					"otherinfo": "",
+					"reference": "",
+					"cweid": "1295",
+					"wascid": "13",
+					"sourceid": "29"
+				},
+				{
+					"pluginid": "10036",
+					"alertRef": "10036-2",
+					"alert": "Server Leaks Version Information via \"Server\" HTTP Response Header Field",
+					"name": "Server Leaks Version Information via \"Server\" HTTP Response Header Field",
+					"riskcode": "1",
+					"confidence": "3",
+					"riskdesc": "Low (High)",
+					"desc": "<p>The web/application server is leaking version information via the \"Server\" HTTP response header. Access to such information may facilitate attackers identifying other vulnerabilities your web/application server is subject to.</p>",
+					"instances":[ 
+						{
+							"id": "2",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25 (Debian)",
+							"otherinfo": ""
+						},
+						{
+							"id": "17",
+							"uri": "http://localhost:8080/",
+							"nodeName": "http:\/\/localhost:8080\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25 (Debian)",
+							"otherinfo": ""
+						},
+						{
+							"id": "19",
+							"uri": "http://localhost:8080/dvwa/css/login.css",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/css\/login.css",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25 (Debian)",
+							"otherinfo": ""
+						},
+						{
+							"id": "5",
+							"uri": "http://localhost:8080/robots.txt",
+							"nodeName": "http:\/\/localhost:8080\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25 (Debian)",
+							"otherinfo": ""
+						},
+						{
+							"id": "13",
+							"uri": "http://localhost:8080/sitemap.xml",
+							"nodeName": "http:\/\/localhost:8080\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "Apache/2.4.25 (Debian)",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is configured to suppress the \"Server\" header or provide generic details.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://httpd.apache.org/docs/current/mod/core.html#servertokens</p><p>https://learn.microsoft.com/en-us/previous-versions/msp-n-p/ff648552(v=pandp.10)</p><p>https://www.troyhunt.com/shhh-dont-let-your-response-headers/</p>",
+					"cweid": "497",
+					"wascid": "13",
+					"sourceid": "1"
+				},
+				{
+					"pluginid": "10021",
+					"alertRef": "10021",
+					"alert": "X-Content-Type-Options Header Missing",
+					"name": "X-Content-Type-Options Header Missing",
+					"riskcode": "1",
+					"confidence": "2",
+					"riskdesc": "Low (Medium)",
+					"desc": "<p>The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.</p>",
+					"instances":[ 
+						{
+							"id": "3",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "21",
+							"uri": "http://localhost:8080/dvwa/css/login.css",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/css\/login.css",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "24",
+							"uri": "http://localhost:8080/dvwa/images/login_logo.png",
+							"nodeName": "http:\/\/localhost:8080\/dvwa\/images\/login_logo.png",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "26",
+							"uri": "http://localhost:8080/login.php",
+							"nodeName": "http:\/\/localhost:8080\/login.php",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						},
+						{
+							"id": "6",
+							"uri": "http://localhost:8080/robots.txt",
+							"nodeName": "http:\/\/localhost:8080\/robots.txt",
+							"method": "GET",
+							"param": "x-content-type-options",
+							"attack": "",
+							"evidence": "",
+							"otherinfo": "This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.\nAt \"High\" threshold this scan rule will not alert on client or server error responses."
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.</p><p>If possible, ensure that the end user uses a standards-compliant and modern web browser that does not perform MIME-sniffing at all, or that can be directed by the web application/web server to not perform MIME-sniffing.</p>",
+					"otherinfo": "<p>This issue still applies to error type pages (401, 403, 500, etc.) as those pages are often still affected by injection issues, in which case there is still concern for browsers sniffing pages away from their actual content type.</p><p>At \"High\" threshold this scan rule will not alert on client or server error responses.</p>",
+					"reference": "<p>https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/compatibility/gg622941(v=vs.85)</p><p>https://owasp.org/www-community/Security_Headers</p>",
+					"cweid": "693",
+					"wascid": "15",
+					"sourceid": "1"
+				},
+				{
+					"pluginid": "10111",
+					"alertRef": "10111",
+					"alert": "Authentication Request Identified",
+					"name": "Authentication Request Identified",
+					"riskcode": "0",
+					"confidence": "3",
+					"riskdesc": "Informational (High)",
+					"desc": "<p>The given request has been identified as an authentication request. The 'Other Info' field contains a set of key=value lines which identify any relevant fields. If the request is in a context which has an Authentication Method set to \"Auto-Detect\" then this rule will change the authentication to match the request identified.</p>",
+					"instances":[ 
+						{
+							"id": "29",
+							"uri": "http://localhost:8080/login.php",
+							"nodeName": "http:\/\/localhost:8080\/login.php ()(Login,password,user_token,username)",
+							"method": "POST",
+							"param": "Login",
+							"attack": "",
+							"evidence": "password",
+							"otherinfo": "userParam=Login\nuserValue=Login\npasswordParam=password\nreferer=http://localhost:8080/login.php\ncsrfToken=user_token"
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>This is an informational alert rather than a vulnerability and so there is nothing to fix.</p>",
+					"otherinfo": "<p>userParam=Login</p><p>userValue=Login</p><p>passwordParam=password</p><p>referer=http://localhost:8080/login.php</p><p>csrfToken=user_token</p>",
+					"reference": "<p>https://www.zaproxy.org/docs/desktop/addons/authentication-helper/auth-req-id/</p>",
+					"cweid": "-1",
+					"wascid": "-1",
+					"sourceid": "23"
+				},
+				{
+					"pluginid": "10027",
+					"alertRef": "10027",
+					"alert": "Information Disclosure - Suspicious Comments",
+					"name": "Information Disclosure - Suspicious Comments",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response appears to contain suspicious comments which may help an attacker.</p>",
+					"instances":[ 
+						{
+							"id": "34",
+							"uri": "http://localhost:8080/setup.php",
+							"nodeName": "http:\/\/localhost:8080\/setup.php",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "db",
+							"otherinfo": "The following pattern was used: \\bDB\\b and was detected in likely comment: \"<!-- Create db button -->\", see evidence field for the suspicious comment/snippet."
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>Remove all comments that return information that may help an attacker and fix any underlying problems they refer to.</p>",
+					"otherinfo": "<p>The following pattern was used: \\bDB\\b and was detected in likely comment: \"<!-- Create db button -->\", see evidence field for the suspicious comment/snippet.</p>",
+					"reference": "",
+					"cweid": "615",
+					"wascid": "13",
+					"sourceid": "25"
+				},
+				{
+					"pluginid": "10112",
+					"alertRef": "10112",
+					"alert": "Session Management Response Identified",
+					"name": "Session Management Response Identified",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The given response has been identified as containing a session management token. The 'Other Info' field contains a set of header tokens that can be used in the Header Based Session Management Method. If the request is in a context which has a Session Management Method set to \"Auto-Detect\" then this rule will change the session management to use the tokens identified.</p>",
+					"instances":[ 
+						{
+							"id": "8",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "PHPSESSID",
+							"attack": "",
+							"evidence": "PHPSESSID",
+							"otherinfo": "cookie:PHPSESSID"
+						},
+						{
+							"id": "4",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "PHPSESSID",
+							"attack": "",
+							"evidence": "PHPSESSID",
+							"otherinfo": "cookie:PHPSESSID"
+						}
+					],
+					"count": "2",
+					"systemic": false,
+					"solution": "<p>This is an informational alert rather than a vulnerability and so there is nothing to fix.</p>",
+					"otherinfo": "<p>cookie:PHPSESSID</p>",
+					"reference": "<p>https://www.zaproxy.org/docs/desktop/addons/authentication-helper/session-mgmt-id/</p>",
+					"cweid": "-1",
+					"wascid": "-1",
+					"sourceid": "7"
+				},
+				{
+					"pluginid": "10104",
+					"alertRef": "10104",
+					"alert": "User Agent Fuzzer",
+					"name": "User Agent Fuzzer",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response.</p>",
+					"instances":[ 
+						{
+							"id": "93",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "92",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "91",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "94",
+							"uri": "http://localhost:8080",
+							"nodeName": "http:\/\/localhost:8080",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "90",
+							"uri": "http://localhost:8080/",
+							"nodeName": "http:\/\/localhost:8080\/",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "",
+					"otherinfo": "",
+					"reference": "<p>https://owasp.org/wstg</p>",
+					"cweid": "0",
+					"wascid": "0",
+					"sourceid": "83"
+				}
+			]
+		}
+	],
+	"sequences":[
+	]
+
+}
