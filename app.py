@@ -123,7 +123,10 @@ async def start_agent_workflow(payload: AgentVulnerabilityInput):
         "repo_owner": payload.repo_owner,
         "repo_name": payload.repo_name,
         "target_file": payload.target_file,
-        "messages": []
+        "messages": [],
+        "ci_retry_count": 0,
+        "ci_max_retry_limit": 2,
+        "active_execution_time": 0.0
     }
 
     async def event_generator():
