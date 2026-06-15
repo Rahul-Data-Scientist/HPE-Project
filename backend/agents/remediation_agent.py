@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from langgraph.graph import StateGraph, START, END, MessagesState
@@ -9,7 +9,7 @@ from langgraph.config import RunnableConfig
 
 from dotenv import load_dotenv
 
-from typing import Optional
+from typing import Optional, Annotated
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -19,6 +19,8 @@ import json
 import time
 import requests
 import aiosqlite
+from functools import wraps
+import operator
 
 import boto3
 from typing import Dict, Any
@@ -39,7 +41,6 @@ SERVERS = {
 
 tools = None
 git_llm = None
-pr_llm = None
 tool_node = None
 git_branch_llm = None
 remediation_llm = None
@@ -48,9 +49,9 @@ MAX_RETRIES = 5
 INITIAL_DELAY = 2  # seconds
 
 async def initialize_agent_components():
-    global tools, git_llm, pr_llm, tool_node, git_branch_llm, remediation_llm
+    global tools, git_llm, tool_node, git_branch_llm, remediation_llm
 
-    if all(x is not None for x in [tools, git_llm, pr_llm, tool_node]):
+    if all(x is not None for x in [tools, git_llm, tool_node]):
         return
 
     last_exception = None
@@ -61,6 +62,26 @@ async def initialize_agent_components():
 
             client = MultiServerMCPClient(SERVERS)
             tools = await client.get_tools()
+
+            # --- Token Budget Optimization: Whitelist Filtering ---
+            required_git_tools = {
+                # Core Remediation Workflow Tools
+                "list_branches",
+                "create_branch",
+                "get_file_contents",
+                "create_or_update_file",
+                "create_pull_request"
+
+                # # PR Interaction & Thread Resolution Tools
+                # "add_issue_comment",
+                # "add_reply_to_pull_request_comment",
+                # "add_comment_to_pending_review",
+                # "pull_request_read",
+                # "pull_request_review_write"
+            }
+
+            # Filter the tool objects based on their name attribute
+            remediation_workflow_tools = [t for t in tools if getattr(t, 'name', '') in required_git_tools]
 
             print(f"[SYSTEM] Securely connected. Loaded {len(tools)} security automation tools.")
             break
@@ -75,9 +96,9 @@ async def initialize_agent_components():
             else:
                 raise last_exception
 
-    git_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0).bind_tools(tools)
-    pr_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0).bind_tools(tools)
-    tool_node = ToolNode(tools, handle_tool_errors=True)
+    # Bind only the filtered toolset to keep context windows lightweight
+    git_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0).bind_tools(remediation_workflow_tools)
+    tool_node = ToolNode(remediation_workflow_tools, handle_tool_errors=True)
     git_branch_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
     remediation_llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0)
 
@@ -99,6 +120,7 @@ class AgentState(MessagesState):
     error_message: Optional[str]
     error_logs: Optional[str]
     pr_merged: Optional[bool]
+    pr_state: Optional[str]
     processed_review_ids: Optional[list] = []
     processed_general_comment_ids: Optional[list] = []
     processed_inline_comment_ids: Optional[list] = []
@@ -106,6 +128,11 @@ class AgentState(MessagesState):
     new_review_ids: Optional[list] = []
     new_general_comment_ids: Optional[list] = []
     new_inline_comment_ids: Optional[list] = []
+    start_idx: Optional[int] = 0
+    input_tokens: Optional[int] = 0
+    output_tokens: Optional[int] = 0
+    total_cost: Optional[float] = 0
+    active_execution_time: Annotated[float, operator.add]
 
 git_retry_policy = RetryPolicy(
     max_attempts=3,
@@ -133,6 +160,7 @@ class RemediationOutput(BaseModel):
     fix_summary: str = Field(..., description="A concise summary of what changes this script is executing...")
 
 async def remediation_node(state: AgentState):
+    current_message_count = len(state.get("messages", []))
     current_script = state.get("modified_file_content", "")
     error_logs = state.get("error_logs", "")
     active_feedback = state.get("pending_feedback", "")
@@ -188,17 +216,19 @@ async def remediation_node(state: AgentState):
         )
         user_prompt = f"Vulnerability Details:\n{state['issue_description']}"
 
-    response: RemediationOutput = await remediation_llm.with_structured_output(RemediationOutput).ainvoke([
+    response: RemediationOutput = await remediation_llm.with_structured_output(RemediationOutput, include_raw = True).ainvoke([
         {"role": "system", "content": system_prompt},
         HumanMessage(content=user_prompt)
     ])
     
     return_payload = {
-        "modified_file_content": response.script_content,
-        "fix_description": response.fix_summary
+        "messages": [response['raw']],
+        "modified_file_content": response["parsed"].script_content,
+        "fix_description": response["parsed"].fix_summary,
+        "start_idx": current_message_count + 1
     }
     if not state.get("branch_name"):
-        return_payload["branch_name"] = response.branch_name
+        return_payload["branch_name"] = response["parsed"].branch_name
         
     return return_payload
 
@@ -225,10 +255,10 @@ async def create_prompt(state: AgentState):
         prompt = (
             f"Using your GitHub tools, execute the following actions sequentially on the repository '{owner}/{repo}':\n\n"
             f"1. Check if a branch named '{branch}' already exists in the repository...\n"
-            f"2. Create or update a file named '{target_file}'...\n"
-            f"3. Write the following content exactly...\n"
-            f"4. Commit with a suitable message\n"
-            f"5. Create a Pull Request to the default branch.\n"
+            f"2. Create or update a file named '{target_file}' in that branch with the following content exactly:\n"
+            f"-----------\n{modified_content}\n-----------\n"
+            f"3. Commit the file changes with a suitable message detailing this security remediation.\n"
+            f"4. Create a Pull Request from branch '{branch}' to the default branch.\n\n"
             f"When all steps are complete, return ONLY: 1. commit sha, 2. pr_url, 3. pr_number\n\n"
             f"You MUST continue calling tools until the Pull request is created."
         )
@@ -236,17 +266,18 @@ async def create_prompt(state: AgentState):
     return {"messages": [HumanMessage(content=prompt)]}
 
 async def git_operator_node(state: AgentState):
+    start_idx = state.get("start_idx", 0)
     # Conditionally printing only the first push invocation to avoid repetitive loop outputs
     if not state.get("messages") or len(state["messages"]) <= 1:
         print("[AGENT] 🚀 Pushing source code changes to remote GitHub repository...")
-    response = await git_llm.ainvoke(state['messages'])
+    response = await git_llm.ainvoke(state['messages'][start_idx:])
     return {"messages": [response]}
 
 class GitWorkflowOutput(BaseModel):
     pr_url: str = Field(..., description = "URL of the PR")
     pr_number: int = Field(..., description = "PR Number")
 
-pr_details_extractor_llm = ChatOpenAI(model = "gpt-4.1-mini", temperature = 0).with_structured_output(GitWorkflowOutput)
+pr_details_extractor_llm = ChatOpenAI(model = "gpt-4.1-mini", temperature = 0).with_structured_output(GitWorkflowOutput, include_raw = True)
 
 async def extract_pr_details(state: AgentState, config: RunnableConfig):
     if state.get("pr_number"):
@@ -267,14 +298,15 @@ async def extract_pr_details(state: AgentState, config: RunnableConfig):
     async with aiosqlite.connect("state_db.sqlite") as db:
         await db.execute(
             "INSERT INTO pr_mappings (pr_number, thread_id) VALUES (?, ?)",
-            (details.pr_number, config["configurable"]["thread_id"])
+            (details['parsed'].pr_number, config["configurable"]["thread_id"])
         )
         await db.commit()
 
-    print(f"[SYSTEM] 🔑 Generated Pull Request successfully verified: PR #{details.pr_number}")
+    print(f"[SYSTEM] 🔑 Generated Pull Request successfully verified: PR #{details['parsed'].pr_number}")
     return {
-        "pr_url": details.pr_url,
-        "pr_number": details.pr_number
+        "messages": details["raw"],
+        "pr_url": details["parsed"].pr_url,
+        "pr_number": details["parsed"].pr_number
     }
 
 async def check_ci_status(state: AgentState):
@@ -319,7 +351,10 @@ async def check_ci_status(state: AgentState):
 async def route_after_ci(state: AgentState):
     ci_status = state["ci_status"]
     if ci_status == "failure":
-        if state["ci_retry_count"] >= state["ci_max_retry_limit"]:
+        retry_count = state.get("ci_retry_count", 0)
+        max_limit = state.get("ci_max_retry_limit", 2)
+
+        if retry_count >= max_limit:
             print("[SYSTEM] 🛑 Maximum CI/CD retry limit reached. Halting automatic operations.")
             return "failure(max_limit_reached)"
         return "failure"
@@ -341,9 +376,16 @@ async def fetch_and_purge_latest_logs(state: AgentState) -> Dict[str, Any]:
             return {"error_logs": "No logs found in S3 for this branch run."}
             
         all_objects = response['Contents']
-        stderr_obj = next((obj for obj in all_objects if obj['Key'].endswith('/stderr')), None)
-        stdout_obj = next((obj for obj in all_objects if obj['Key'].endswith('/stdout')), None)
-        target_obj = stderr_obj if stderr_obj else stdout_obj
+        # 1. Filter all objects that match your criteria
+        stderr_objects = [obj for obj in all_objects if obj['Key'].endswith('/stderr')]
+        stdout_objects = [obj for obj in all_objects if obj['Key'].endswith('/stdout')]
+
+        # 2. Sort them by LastModified date in descending order (newest first)
+        stderr_objects.sort(key=lambda x: x['LastModified'], reverse=True)
+        stdout_objects.sort(key=lambda x: x['LastModified'], reverse=True)
+
+        # 3. Pick the newest stderr, fallback to newest stdout
+        target_obj = stderr_objects[0] if stderr_objects else (stdout_objects[0] if stdout_objects else None)
         
         if not target_obj:
             return {"error_logs": "Log directory exists, but target execution files were missing."}
@@ -364,7 +406,7 @@ async def fetch_and_purge_latest_logs(state: AgentState) -> Dict[str, Any]:
     except Exception as e:
         return {"error_logs": f"{error_logs}\n\n[SYSTEM WARNING] S3 Clear Error: {str(e)}"}
 
-    current_retry = state.get("ci_retry_count", 0) 
+    current_retry = state.get("ci_retry_count", 0)  
     return {"error_logs": error_logs, "ci_retry_count": current_retry + 1}
 
 async def open_for_resume_request(state: AgentState, config: RunnableConfig):
@@ -403,13 +445,16 @@ async def wait_for_human_approval(state: AgentState):
     result = await pr_tool.ainvoke({"method": "get", "owner": owner, "repo": repo, "pullNumber": pr_number})
     data = json.loads(result[0]['text'])
 
-    return {"pending_feedback": "", "pr_merged": data["merged"]}
+    return {"pending_feedback": "", "pr_merged": data["merged"], "pr_state": data['state']}
 
 async def route_after_human_decision(state: AgentState):
     if state.get("pr_merged"):
         print("[AGENT] 🎉 Code approved and merged by engineer! Finalizing remediation session.")
-        return "approved"
+        return "approved/pr_closed"
     else:
+        if state.get("pr_state", "") == "closed":
+            print("[AGENT] 📦 Pull Request has been closed without being merged. Terminating remediation workflow.")
+            return "approved/pr_closed"
         return "not_approved"
     
 async def fetch_pr_feedback_node(state: AgentState):
@@ -490,21 +535,66 @@ async def fetch_pr_feedback_node(state: AgentState):
         "ci_retry_count": 0
     }
 
+async def calculate_tokens_and_cost_consumption(state: AgentState):
+    ai_msgs = [
+        ai_msg
+        for ai_msg in state["messages"]
+        if isinstance(ai_msg, AIMessage)
+    ]
+
+    input_tokens = 0
+    output_tokens = 0
+
+    for ai_msg in ai_msgs:
+        usage = ai_msg.response_metadata["token_usage"]
+        input_tokens += usage["prompt_tokens"]
+        output_tokens += usage["completion_tokens"]
+
+    input_cost = (input_tokens / 1_000_000) * 0.40
+    output_cost = (output_tokens / 1_000_000) * 1.60
+    total_cost = input_cost + output_cost
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_cost": total_cost
+    }
+
+def track_time(node_func):
+    @wraps(node_func)
+    async def wrapper(state, *args, **kwargs):
+        start = time.perf_counter()
+
+        result = await node_func(state, *args, **kwargs)
+
+        elapsed = time.perf_counter() - start
+
+        if result is None:
+            result = {}
+
+        result["active_execution_time"] = elapsed
+        return result
+
+    return wrapper
+
+
+
 async def build_graph(checkpointer):
     if tool_node is None:
         raise RuntimeError("Agent tools not initialized.")
     
     graph = StateGraph(AgentState)
-    graph.add_node("generate_remediation_script", remediation_node)
-    graph.add_node("create_prompt", create_prompt)
-    graph.add_node("github_workflow", git_operator_node, retry_policy=git_retry_policy)
+    graph.add_node("generate_remediation_script", track_time(remediation_node))
+    graph.add_node("create_prompt", track_time(create_prompt))
+    graph.add_node("github_workflow", track_time(git_operator_node), retry_policy=git_retry_policy)
     graph.add_node("github_tools", tool_node)
-    graph.add_node("extract_pr_details", extract_pr_details)
-    graph.add_node("check_ci_status", check_ci_status)
-    graph.add_node("fetch_and_delete_error_logs", fetch_and_purge_latest_logs)
+    graph.add_node("extract_pr_details", track_time(extract_pr_details))
+    graph.add_node("check_ci_status", track_time(check_ci_status))
+    graph.add_node("fetch_and_delete_error_logs", track_time(fetch_and_purge_latest_logs))
     graph.add_node("wait_for_human_approval", wait_for_human_approval)
-    graph.add_node("fetch_pr_feedback", fetch_pr_feedback_node)
-    graph.add_node("open_for_resume_request", open_for_resume_request)
+    graph.add_node("fetch_pr_feedback", track_time(fetch_pr_feedback_node))
+    graph.add_node("open_for_resume_request", track_time(open_for_resume_request))
+    graph.add_node("calculate_tokens_and_cost_consumption", track_time(calculate_tokens_and_cost_consumption))
 
     graph.add_edge(START, "generate_remediation_script")
     graph.add_edge("generate_remediation_script", "create_prompt")
@@ -513,16 +603,17 @@ async def build_graph(checkpointer):
     graph.add_edge("github_tools", "github_workflow")
     graph.add_edge("extract_pr_details", "check_ci_status")
     graph.add_conditional_edges("check_ci_status", route_after_ci, {
-        "failure(max_limit_reached)": "__end__", 
+        "failure(max_limit_reached)": "calculate_tokens_and_cost_consumption", 
         "failure": "fetch_and_delete_error_logs",
         "success": "open_for_resume_request"
         })
     graph.add_edge("fetch_and_delete_error_logs", "generate_remediation_script")
     graph.add_edge("open_for_resume_request", "wait_for_human_approval")
     graph.add_conditional_edges("wait_for_human_approval", route_after_human_decision, {
-        "approved": "__end__",
+        "approved/pr_closed": "calculate_tokens_and_cost_consumption",
         "not_approved": "fetch_pr_feedback"
     })
     graph.add_edge("fetch_pr_feedback", "generate_remediation_script")
+    graph.add_edge("calculate_tokens_and_cost_consumption", END)
 
     return graph.compile(checkpointer=checkpointer)
