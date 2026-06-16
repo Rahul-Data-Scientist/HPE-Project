@@ -1,5 +1,7 @@
 Initial Trials
 .env
+/.env
+*.env
 hpe-project-key.pem
 rough.ipynb
 rough2.py
