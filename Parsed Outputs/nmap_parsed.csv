@@ -1,0 +1,3 @@
+port,protocol,service_name,product,version,cpe,num_cves,cve_ids,max_cvss,avg_cvss,num_exploits,has_exploit,num_misconfigs,misconfig_issues,misconfig_severity,unexpected_service_flag,is_exposed,service_category,is_high_risk_port,fixed_version
+22,tcp,ssh,OpenSSH,9.6p1 Ubuntu 3ubuntu13.15,cpe:/a:openbsd:openssh:9.6p1,7,"CVE-2025-26465,CVE-2024-6387,CVE-2024-39894,CVE-2025-26466,CVE-2025-61985,CVE-2025-61984,CVE-2025-32728",8.1,5.685714285714285,71,1,0,,,0,1,remote_access,1,
+8888,tcp,http-proxy,tinyproxy,1.11.1,cpe:/a:banu:tinyproxy:1.11.1,1,CVE-2023-49606,9.8,9.8,1,1,1,http-slowloris-check,Low,0,1,web,0,
