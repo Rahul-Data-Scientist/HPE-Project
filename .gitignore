@@ -1,4 +1,18 @@
-Initial Trials
+
+.env
+
+./backend/.env
+backend/.env
+./frontend/.env
+
+.refact/
+
+backend/__pycache__/
+backend/agents/__pycache__/
+backend/state_db.sqlite
+frontend/node_modules/
+frontend/.next/
+
 .env
 hpe-project-key.pem
 rough.ipynb
