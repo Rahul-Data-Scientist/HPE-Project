@@ -1,6 +1,6 @@
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 import aiofiles
@@ -9,6 +9,7 @@ import aiosqlite
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
@@ -30,7 +31,7 @@ async def update_workflow_state(thread_id: str, status: str):
             (thread_id, status, updated_at)
             VALUES (?, ?, ?)
             """,
-            (thread_id, status, datetime.utcnow().isoformat())
+            (thread_id, status, datetime.now(timezone.utc).isoformat())
         )
         await db.commit()
 
@@ -90,6 +91,7 @@ async def resume_agent_background(thread_id: str):
 
     except Exception as e:
         await update_workflow_state(thread_id, FAILED)
+
         print(f"[CRITICAL ERROR] Execution failed: {e}")
 
 async def init_database():
@@ -113,6 +115,7 @@ class AgentVulnerabilityInput(BaseModel):
     repo_owner: str
     repo_name: str
     target_file: str
+    reference_links: Optional[list[str]] = []
 
 @app.post("/start-agent")
 async def start_agent_workflow(payload: AgentVulnerabilityInput):
@@ -123,10 +126,12 @@ async def start_agent_workflow(payload: AgentVulnerabilityInput):
         "repo_owner": payload.repo_owner,
         "repo_name": payload.repo_name,
         "target_file": payload.target_file,
+        "reference_links": payload.reference_links,
         "messages": [],
         "ci_retry_count": 0,
         "ci_max_retry_limit": 2,
-        "active_execution_time": 0.0
+        "active_execution_time": 0.0,
+        "start_time": datetime.now(timezone.utc).isoformat()
     }
 
     async def event_generator():
@@ -156,6 +161,8 @@ async def github_webhook_listener(request: Request, background_tasks: Background
     should_continue = False
 
     if event_type == "pull_request" and payload.get("action") == "closed" and payload["pull_request"].get("merged") is True:
+        should_continue = True
+    elif event_type == "pull_request" and payload.get("action") == "closed" and not payload["pull_request"].get("merged"):
         should_continue = True
     elif event_type == "pull_request_review" and payload.get("action") == "submitted":
         should_continue = True
