@@ -492,7 +492,13 @@ async def fetch_pr_feedback_node(state: AgentState):
 
     # General Comments
     try:
-        response = requests.get(f"{base_url}/issues/{pr_number}/comments", headers=headers)
+        # response = requests.get(f"{base_url}/issues/{pr_number}/comments", headers=headers)
+        # response.raise_for_status()
+        response = await asyncio.to_thread(
+            requests.get, 
+            f"{base_url}/issues/{pr_number}/comments", 
+            headers=headers
+        )
         response.raise_for_status()
         for comment in response.json():
             comment_id = comment["id"]

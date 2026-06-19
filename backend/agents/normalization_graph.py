@@ -16,9 +16,9 @@ async def normalize_schema_node(state: NormalizationState):
             # Standardize key format (lowercase, underscores)
             clean_key = str(key).lower().strip().replace(' ', '_')
             
-            # Map various ID names to standard 'vuln_id'
-            if clean_key in ['vulnerability_id', 'cve_id', 'id', 'name', 'vulnerability']:
-                clean_key = 'vuln_id'
+            # Map various ID names to standard 'asset_id'
+            if clean_key in ["asset_id"]:
+                clean_key = 'asset_id'
                 
             # Map various Severity names to standard 'severity' (FIX FOR CSV DATA)
             if clean_key in ['severity_raw', 'priority_level', 'risk_level', 'priority']:

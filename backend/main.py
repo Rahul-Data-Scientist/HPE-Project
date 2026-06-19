@@ -2,11 +2,14 @@ import uuid
 import json
 import asyncio
 from datetime import datetime
+import os
+import asyncpg
+from datetime import timedelta
 from contextlib import asynccontextmanager
 
 import aiofiles
 import aiosqlite
-from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, UploadFile, File
+from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -27,26 +30,48 @@ COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 RESUMING = "RESUMING"
 
+
+# Add your connection string
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:vaibhav@localhost:5432/postgres")
+
+# 🟢 Global lock to prevent race conditions when multiple uploads happen simultaneously
+queue_lock = asyncio.Lock()
+
 # --- DATABASE UTILS ---
 async def init_database():
     async with aiosqlite.connect("state_db.sqlite") as db:
-        # For tracking PRs to thread IDs
+        await db.execute("PRAGMA journal_mode=WAL;")
+        
         await db.execute("CREATE TABLE IF NOT EXISTS pr_mappings (pr_number INTEGER PRIMARY KEY, thread_id TEXT NOT NULL)")
-        # For tracking LangGraph node states
         await db.execute("CREATE TABLE IF NOT EXISTS workflow_state (thread_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL)")
-        # For the priority queue system
+        
+        # Base table creation with error_reason
         await db.execute("""
             CREATE TABLE IF NOT EXISTS vulnerabilities (
-                vuln_id TEXT PRIMARY KEY, 
+                asset_id TEXT PRIMARY KEY, 
                 score REAL, 
                 status TEXT NOT NULL, 
-                data TEXT NOT NULL
+                data TEXT NOT NULL,
+                retry_count INTEGER DEFAULT 0,
+                error_reason TEXT
             )
         """)
+        
+        # Safely patch existing databases to add the new columns!
+        try:
+            await db.execute("ALTER TABLE vulnerabilities ADD COLUMN retry_count INTEGER DEFAULT 0")
+        except aiosqlite.OperationalError:
+            pass  
+            
+        try:
+            await db.execute("ALTER TABLE vulnerabilities ADD COLUMN error_reason TEXT")
+        except aiosqlite.OperationalError:
+            pass  
+
         await db.commit()
 
 async def update_workflow_state(thread_id: str, status: str):
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
         await db.execute(
             "INSERT OR REPLACE INTO workflow_state (thread_id, status, updated_at) VALUES (?, ?, ?)",
             (thread_id, status, datetime.utcnow().isoformat())
@@ -54,13 +79,13 @@ async def update_workflow_state(thread_id: str, status: str):
         await db.commit()
 
 async def get_workflow_state(thread_id: str) -> str | None:
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
         async with db.execute("SELECT status FROM workflow_state WHERE thread_id = ?", (thread_id,)) as cursor:
             row = await cursor.fetchone()
     return row[0] if row else None
 
 async def claim_workflow_for_resume(thread_id: str) -> bool:
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
         cursor = await db.execute(
             "UPDATE workflow_state SET status = 'RESUMING' WHERE thread_id = ? AND status = 'WAITING_FOR_HUMAN_APPROVAL'",
             (thread_id,)
@@ -90,7 +115,6 @@ class ConnectionManager:
                 print(f"[WS ERROR] Dropping dead connection: {str(e)}")
                 dead_connections.append(connection)
                 
-        # Clean up disconnected clients
         for dead in dead_connections:
             self.disconnect(dead)
 
@@ -106,153 +130,266 @@ NODE_LOG_MAP = {
     "fetch_and_delete_error_logs": "[AWS S3] 📥 Fetching failed CI/CD execution logs...",
     "open_for_resume_request": "[SYSTEM] ✅ Updating PR with wait status...",
     "wait_for_human_approval": "[STANDBY] 💤 Agent entering sleep mode. Awaiting human review...",
-    "fetch_pr_feedback": "[AGENT] 🔄 Waking up. Fetching human peer review feedback..."
+    "fetch_pr_feedback": "[AGENT] 🔄 Waking up. Fetching human peer review feedback...",
+    "calculate_tokens_and_cost_consumption": "[SYSTEM] 💸 Calculating token usage and cost..."
 }
 
 async def process_single_task():
-    """Processes exactly one PENDING task from the database. Recursively calls itself when finished."""
-    async with aiosqlite.connect("state_db.sqlite") as db:
-        # ATOMIC CHECK: Only pick up if nothing is currently IN_PROGRESS
-        async with db.execute("SELECT count(*) FROM vulnerabilities WHERE status = 'IN_PROGRESS'") as cursor:
-            if (await cursor.fetchone())[0] > 0:
-                print("[SYSTEM] An agent is already active. Yielding.")
-                return 
+    async with queue_lock:
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+            async with db.execute("SELECT count(*) FROM vulnerabilities WHERE status = 'IN_PROGRESS'") as cursor:
+                if (await cursor.fetchone())[0] > 0:
+                    print("[SYSTEM] An agent is already active. Yielding.")
+                    return 
 
-        # Grab the highest priority PENDING task
-        async with db.execute("SELECT vuln_id, data FROM vulnerabilities WHERE status = 'PENDING' ORDER BY score DESC LIMIT 1") as cursor:
-            row = await cursor.fetchone()
-            
-    if not row:
-        print("[SYSTEM] Queue empty, returning to idle state.")
-        return
+            async with db.execute("SELECT asset_id, data, retry_count FROM vulnerabilities WHERE status = 'PENDING' ORDER BY score DESC LIMIT 1") as cursor:
+                row = await cursor.fetchone()
+                
+        if not row:
+            print("[SYSTEM] Queue empty, returning to idle state.")
+            return
 
-    vuln_id, raw_data = row
-    task_data = json.loads(raw_data)
-    
-    # Lock the task so no other worker picks it up
-    async with aiosqlite.connect("state_db.sqlite") as db:
-        await db.execute("UPDATE vulnerabilities SET status = 'IN_PROGRESS' WHERE vuln_id = ?", (vuln_id,))
-        await db.commit()
+        asset_id = row[0]
+        raw_data = row[1]
+        retry_count = row[2] or 0 
+        task_data = json.loads(raw_data)
+        
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+            # 🟢 Clear any previous errors when starting a fresh execution loop
+            await db.execute("UPDATE vulnerabilities SET status = 'IN_PROGRESS', error_reason = NULL WHERE asset_id = ?", (asset_id,))
+            await db.commit()
 
-    print(f"\n[QUEUE] Processing Vulnerability: {vuln_id}")
-    await manager.broadcast({"vuln_id": vuln_id, "status": "IN_PROGRESS"})
+    print(f"\n[QUEUE] Processing Vulnerability: {asset_id} (Attempt {retry_count + 1}/3)")
+    await manager.broadcast({"asset_id": asset_id, "status": "IN_PROGRESS"})
 
     try:
-        # Prepare state for the remediation agent
         initial_state = {
             "issue_description": str(task_data),
-            "repo_owner": task_data.get("repo_owner", "Rahul-Data-Scientist"), # Fallback
-            "repo_name": task_data.get("repo_name", "vulnerability-remediation"), # Fallback
+            "repo_owner": task_data.get("repo_owner", "Rahul-Data-Scientist"),
+            "repo_name": task_data.get("repo_name", "vulnerability-remediation"),
             "messages": []
         }
         
-        config = {"configurable": {"thread_id": vuln_id}}
-        await update_workflow_state(vuln_id, IN_PROGRESS)
+        config = {"configurable": {"thread_id": asset_id}}
+        await update_workflow_state(asset_id, IN_PROGRESS)
         
         async with AsyncSqliteSaver.from_conn_string("state_db.sqlite") as checkpointer:
             remediation_graph = await build_graph(checkpointer=checkpointer)
             
-            # Stream the LangGraph execution
+            logged_nodes = set()
+            
             async for event in remediation_graph.astream(initial_state, config=config, stream_mode="updates"):
                 for node_name, state_updates in event.items():
                     if node_name == "github_tools": 
                         continue
                     
+                    if node_name == "__interrupt__":
+                        await manager.broadcast({
+                            "type": "ACTION_REQUIRED", 
+                            "asset_id": asset_id,
+                            "node": "wait_for_human_approval",
+                            "status": "WAITING_FOR_APPROVAL",
+                            "log": "[STANDBY] 💤 Agent entering sleep mode. Awaiting human review..."
+                        })
+                        
+                        await update_workflow_state(asset_id, WAITING_FOR_HUMAN_APPROVAL)
+                        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+                            await db.execute("UPDATE vulnerabilities SET status = 'WAITING_FOR_APPROVAL' WHERE asset_id = ?", (asset_id,))
+                            await db.commit()
+                        
+                        return 
+
+                    if node_name == "github_workflow":
+                        if "github_workflow" in logged_nodes:
+                            continue
+                        logged_nodes.add("github_workflow")
+
                     log_msg = NODE_LOG_MAP.get(node_name, f"[SYSTEM] Executing {node_name}...")
-                    await manager.broadcast({"vuln_id": vuln_id, "node": node_name, "log": log_msg})
+                    await manager.broadcast({"asset_id": asset_id, "node": node_name, "log": log_msg})
 
-                    # Handle failure logs visually
                     if node_name == "check_ci_status" and state_updates.get("ci_status") == "failure":
-                        await manager.broadcast({"vuln_id": vuln_id, "log": "[WARNING] ❌ CI/CD Pipeline failed. Triggering self-healing loop..."})
+                        await manager.broadcast({"asset_id": asset_id, "log": "[WARNING] ❌ CI/CD Pipeline failed. Triggering self-healing loop..."})
 
-                    # Handle the human interrupt
-                    if node_name == "wait_for_human_approval":
-                        await manager.broadcast({"type": "ACTION_REQUIRED", "vuln_id": vuln_id})
-                        return # Stop the chain reaction here; Webhook will resume it later
-
-        # Check if it finished without being interrupted
-        current_state = await get_workflow_state(vuln_id)
+        current_state = await get_workflow_state(asset_id)
         if current_state != WAITING_FOR_HUMAN_APPROVAL:
-            # Mark as resolved in DB
-            async with aiosqlite.connect("state_db.sqlite") as db:
-                await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED' WHERE vuln_id = ?", (vuln_id,))
+            async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+                await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED' WHERE asset_id = ?", (asset_id,))
                 await db.commit()
             
-            await update_workflow_state(vuln_id, COMPLETED)
-            await manager.broadcast({"vuln_id": vuln_id, "status": "COMPLETED", "log": f"[SYSTEM] 🎉 {vuln_id} Resolved."})
+            await update_workflow_state(asset_id, COMPLETED)
+            await manager.broadcast({"asset_id": asset_id, "status": "COMPLETED", "log": f"[SYSTEM] 🎉 {asset_id} Resolved."})
             
-            # RECURSIVE TRIGGER: Start the next task in the queue immediately
-            await process_single_task()
+            asyncio.create_task(process_single_task())
             
     except Exception as e:
-        print(f"[QUEUE ERROR] {str(e)}")
-        await manager.broadcast({"vuln_id": vuln_id, "log": f"[CRITICAL ERROR] {str(e)}"})
+        error_msg = str(e)
+        print(f"[QUEUE ERROR] {error_msg}")
+        
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+            if retry_count < 2:
+                new_count = retry_count + 1
+                # 🟢 Record transient error reason
+                await db.execute("UPDATE vulnerabilities SET status = 'PENDING', retry_count = ?, error_reason = ? WHERE asset_id = ?", 
+                                 (new_count, f"Attempt {retry_count + 1} Failed: {error_msg}", asset_id))
+                await db.commit()
+                await manager.broadcast({
+                    "asset_id": asset_id, 
+                    "status": "PENDING", 
+                    "log": f"[WARNING] Network/Execution Error. Auto-retrying {asset_id} (Attempt {new_count + 1}/3)..."
+                })
+            else:
+                # 🟢 Record permanent error reason
+                await db.execute("UPDATE vulnerabilities SET status = 'FAILED', error_reason = ? WHERE asset_id = ?", 
+                                 (f"Permanent Failure: {error_msg}", asset_id))
+                await db.commit()
+                await update_workflow_state(asset_id, FAILED)
+                await manager.broadcast({
+                    "asset_id": asset_id, 
+                    "status": "FAILED", 
+                    "log": f"[CRITICAL ERROR] Failed permanently after 3 attempts. Skipping. Error: {error_msg}"
+                })
+        
+        asyncio.create_task(process_single_task())
 
 
 # --- BACKGROUND RESUME TASK ---
 async def resume_agent_background(thread_id: str):
     config = {"configurable": {"thread_id": thread_id}}
     try:
-        # 1. Update state in DB
         await update_workflow_state(thread_id, RESUMING)
         
-        # 2. IMMEDIATELY tell the UI we are waking up
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+            # 🟢 Clear previous error records when successfully resuming
+            await db.execute("UPDATE vulnerabilities SET status = 'IN_PROGRESS', error_reason = NULL WHERE asset_id = ?", (thread_id,))
+            await db.commit()
+        
         await manager.broadcast({
-            "vuln_id": thread_id, 
+            "asset_id": thread_id, 
             "status": "IN_PROGRESS", 
-            "log": "[WEBHOOK] 🔄 GitHub interaction detected. Resuming remediation pipeline..."
+            "log": "[WEBHOOK] 🚀 GitHub Webhook triggered. Agent waking up..."
         })
         
         async with AsyncSqliteSaver.from_conn_string("state_db.sqlite") as checkpointer:
             github_workflow_agent = await build_graph(checkpointer=checkpointer)
             
-            # 3. Stream the resumed execution
+            logged_nodes = set()
+            
             async for event in github_workflow_agent.astream(Command(resume=True), config=config, stream_mode="updates"):
                 for node_name, state_updates in event.items():
-                    if node_name == "github_tools": continue
+                    if node_name == "github_tools": 
+                        continue
+                        
+                    if node_name == "__interrupt__":
+                        await manager.broadcast({
+                            "type": "ACTION_REQUIRED", 
+                            "asset_id": thread_id,
+                            "node": "wait_for_human_approval",
+                            "status": "WAITING_FOR_APPROVAL",
+                            "log": "[STANDBY] 💤 Agent entering sleep mode. Awaiting human review..."
+                        })
+                        
+                        await update_workflow_state(thread_id, WAITING_FOR_HUMAN_APPROVAL)
+                        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+                            await db.execute("UPDATE vulnerabilities SET status = 'WAITING_FOR_APPROVAL' WHERE asset_id = ?", (thread_id,))
+                            await db.commit()
+                        
+                        return 
+                    
+                    if node_name == "github_workflow":
+                        if "github_workflow" in logged_nodes:
+                            continue
+                        logged_nodes.add("github_workflow")
+                        
+                    if node_name == "wait_for_human_approval":
+                        continue
                     
                     log_msg = NODE_LOG_MAP.get(node_name, f"[SYSTEM] Resuming {node_name}...")
-                    await manager.broadcast({"vuln_id": thread_id, "node": node_name, "log": log_msg})
+                    await manager.broadcast({"asset_id": thread_id, "node": node_name, "log": log_msg})
+
+                    if node_name == "check_ci_status" and state_updates.get("ci_status") == "failure":
+                        await manager.broadcast({"asset_id": thread_id, "log": "[WARNING] ❌ CI/CD Pipeline failed. Triggering self-healing loop..."})
         
-        # 4. Final resolve
-        async with aiosqlite.connect("state_db.sqlite") as db:
-            await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED' WHERE vuln_id = ?", (thread_id,))
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+            await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED' WHERE asset_id = ?", (thread_id,))
             await db.commit()
             
         await update_workflow_state(thread_id, COMPLETED)
-        await manager.broadcast({"vuln_id": thread_id, "status": "COMPLETED", "log": "[SYSTEM] ✅ Human approval processed. Workflow complete."})
+        await manager.broadcast({"asset_id": thread_id, "status": "COMPLETED", "log": "[SYSTEM] ✅ Human approval processed. Workflow complete."})
 
-        # RECURSIVE TRIGGER: After human approval loop finishes, process next item in queue
-        await process_single_task()
+        asyncio.create_task(process_single_task())
 
     except Exception as e:
-        await update_workflow_state(thread_id, FAILED)
-        print(f"[CRITICAL ERROR] Resume failed: {e}")
-        await manager.broadcast({"vuln_id": thread_id, "log": f"[ERROR] Failed to resume agent: {str(e)}"})
+        error_msg = str(e)
+        print(f"[CRITICAL ERROR] Resume failed: {error_msg}")
+        
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+            async with db.execute("SELECT retry_count FROM vulnerabilities WHERE asset_id = ?", (thread_id,)) as cursor:
+                row = await cursor.fetchone()
+                retry_count = row[0] if (row and len(row) > 0) else 0
+
+            if retry_count < 2:
+                new_count = retry_count + 1
+                # 🟢 Record transient error reason
+                await db.execute("UPDATE vulnerabilities SET status = 'WAITING_FOR_APPROVAL', retry_count = ?, error_reason = ? WHERE asset_id = ?", 
+                                 (new_count, f"Resume Attempt {retry_count + 1} Failed: {error_msg}", thread_id))
+                await db.commit()
+                await update_workflow_state(thread_id, WAITING_FOR_HUMAN_APPROVAL)
+                await manager.broadcast({
+                    "asset_id": thread_id, 
+                    "status": "WAITING_FOR_APPROVAL", 
+                    "log": f"[WARNING] Resume crashed. Webhook can be re-triggered (Attempt {new_count + 1}/3)..."
+                })
+            else:
+                # 🟢 Record permanent error reason
+                await db.execute("UPDATE vulnerabilities SET status = 'FAILED', error_reason = ? WHERE asset_id = ?", 
+                                 (f"Resume Permanent Failure: {error_msg}", thread_id))
+                await db.commit()
+                await update_workflow_state(thread_id, FAILED)
+                await manager.broadcast({
+                    "asset_id": thread_id, 
+                    "status": "FAILED", 
+                    "log": f"[ERROR] Failed to resume permanently after 3 attempts: {error_msg}"
+                })
+
+        asyncio.create_task(process_single_task())
 
 
 # --- FASTAPI APP & LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("[SYSTEM] Connecting to PostgreSQL...")
+    app.state.pool = await asyncpg.create_pool(DATABASE_URL)
+    
+    
     await init_database()
+    
+    # 🟢 Record a generic error reason for orphaned tasks caused by a server reboot
+    async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+        await db.execute(
+            "UPDATE vulnerabilities SET status = 'FAILED', error_reason = 'Server crashed or restarted during active execution' "
+            "WHERE status = 'IN_PROGRESS' OR status = 'RESUMING'"
+        )
+        await db.execute("UPDATE workflow_state SET status = 'FAILED' WHERE status = 'IN_PROGRESS' OR status = 'RESUMING'")
+        await db.commit()
+    
     print("[SYSTEM] Booting Security Remediation Core Agent Environment...")
     await initialize_agent_components()
     print("[SYSTEM] System ready. Awaiting inbound vulnerability triggers.\n" + "="*60)
     yield
-    # No more background polling loop to cancel!
+    
+    await app.state.pool.close()
 
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- ROUTES ---
-
 @app.websocket("/api/v1/ws/updates")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -264,9 +401,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/api/v1/upload")
 async def handle_csv_upload(file: UploadFile = File(...), background_tasks: BackgroundTasks = BackgroundTasks()):
-    """Handles the sequential pre-processing pipeline."""
     try:
-        # 1. PARSING
         print("-----Started CSV Upload Pipeline-----")
         await manager.broadcast({"step": "Parsing", "log": f"[SYSTEM] Upload received: {file.filename}. Starting Parsing Agent..."})
         file_bytes = await file.read()
@@ -276,46 +411,41 @@ async def handle_csv_upload(file: UploadFile = File(...), background_tasks: Back
         await manager.broadcast({"log": parsed_state["log_message"]})
         print("-----Parsing Complete-----")
         
-        # 2. NORMALIZATION
         await manager.broadcast({"step": "Normalization", "log": "[SYSTEM] Initializing Normalization Agent..."})
         norm_graph = build_normalization_graph()
         norm_state = await norm_graph.ainvoke({"raw_data": parsed_state["raw_data"]})
         await manager.broadcast({"log": norm_state["log_message"]})
         print("-----Normalization Complete-----")
         
-        # 3. PRIORITIZATION
         await manager.broadcast({"step": "Prioritization", "log": "[SYSTEM] Calculating threat vectors and CVSS scores..."})
         prio_graph = build_prioritization_graph()
         prio_state = await prio_graph.ainvoke({"normalized_data": norm_state["normalized_data"]})
         await manager.broadcast({"log": prio_state["log_message"]})
         print("-----Prioritization Complete-----")
         
-        # 4. QUEUEING (Save to SQLite DB)
         tasks = prio_state["prioritized_data"]
-        async with aiosqlite.connect("state_db.sqlite") as db:
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
             for task in tasks:
-                if "vuln_id" not in task or not task["vuln_id"]:
-                    task["vuln_id"] = f"VULN-{uuid.uuid4().hex[:6]}"
+                if "asset_id" not in task or not task["asset_id"]:
+                    task["asset_id"] = f"VULN-{uuid.uuid4().hex[:6]}"
                 
                 score = task.get("priority_score", 5.0)
                 
                 await db.execute(
-                    "INSERT OR IGNORE INTO vulnerabilities (vuln_id, score, status, data) VALUES (?, ?, ?, ?)",
-                    (task["vuln_id"], score, PENDING, json.dumps(task))
+                    "INSERT OR IGNORE INTO vulnerabilities (asset_id, score, status, data) VALUES (?, ?, ?, ?)",
+                    (task["asset_id"], score, PENDING, json.dumps(task))
                 )
             await db.commit()
         
         print("-----Queueing Complete-----")
         
-        # 5. UI SYNCHRONIZATION
         await manager.broadcast({
             "type": "NEW_BATCH",
             "step": "Remediation",
             "log": "[SYSTEM] Pre-processing complete. Handing off to Remediation Queue...",
-            "tasks": tasks[:10] # Send top 10 to UI
+            "tasks": tasks[:10]
         })
 
-        # 6. KICKSTART THE BACKGROUND QUEUE
         background_tasks.add_task(process_single_task)
 
         return {"status": "success", "queued_items": len(tasks)}
@@ -324,10 +454,8 @@ async def handle_csv_upload(file: UploadFile = File(...), background_tasks: Back
         await manager.broadcast({"log": f"[CRITICAL ERROR] Pipeline failed: {str(e)}"})
         return {"status": "error", "message": str(e)}
 
-
 @app.post("/github-webhook")
 async def github_webhook_listener(request: Request, background_tasks: BackgroundTasks):
-    """Listens for GitHub PR actions to resume waiting agents."""
     payload = await request.json()
     
     async with aiofiles.open("github_webhook_payload2.json", "a", encoding="utf-8") as f:
@@ -350,8 +478,7 @@ async def github_webhook_listener(request: Request, background_tasks: Background
         if not pr_number:
             return {"status": "ignored"}
 
-        # Fetch thread ID mapped to this PR
-        async with aiosqlite.connect("state_db.sqlite") as db:
+        async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
             async with db.execute("SELECT thread_id FROM pr_mappings WHERE pr_number = ?", (pr_number,)) as cursor:
                 row = await cursor.fetchone()
                 thread_id = row[0] if row else None
@@ -363,11 +490,10 @@ async def github_webhook_listener(request: Request, background_tasks: Background
         if not claimed:
             return {"status": "ignored", "reason": "already_resuming"}
 
-        # Force UI update IMMEDIATELY so the user knows the merge was detected
         await manager.broadcast({
-            "vuln_id": thread_id, 
+            "asset_id": thread_id, 
             "status": "IN_PROGRESS", 
-            "log": "[WEBHOOK] 🚀 GitHub Merge detected. Agent waking up..."
+            "log": "[WEBHOOK] 🔄 GitHub interaction detected. Resuming remediation pipeline..."
         })
 
         background_tasks.add_task(resume_agent_background, thread_id)
@@ -375,12 +501,124 @@ async def github_webhook_listener(request: Request, background_tasks: Background
 
     return {"status": "ignored"}
 
-
-@app.get("/api/v1/status/{vuln_id}")
-async def get_vuln_status(vuln_id: str):
-    async with aiosqlite.connect("state_db.sqlite") as db:
-        async with db.execute("SELECT status FROM vulnerabilities WHERE vuln_id = ?", (vuln_id,)) as cursor:
+@app.get("/api/v1/status/{asset_id}")
+async def get_vuln_status(asset_id: str):
+    async with aiosqlite.connect("state_db.sqlite", timeout=10.0) as db:
+        async with db.execute("SELECT status FROM vulnerabilities WHERE asset_id = ?", (asset_id,)) as cursor:
             row = await cursor.fetchone()
             if row:
-                return {"vuln_id": vuln_id, "status": row[0]}
+                return {"asset_id": asset_id, "status": row[0]}
     return {"status": "NOT_FOUND"}
+
+
+
+
+# ==========================================
+# DASHBOARD REST ENDPOINT (PostgreSQL)
+# ==========================================
+from fastapi import Request
+from datetime import timedelta
+
+def format_mttr(td: timedelta) -> str:
+    if not td: return "0m 0s"
+    # Convert the entire timedelta into total seconds
+    total_seconds = int(td.total_seconds())
+    # Divide by 60 to get total minutes, and keep the remainder as seconds
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{minutes}m {seconds}s"
+
+def get_severity_label_and_color(score: float):
+    if score is None: return "Low", "#3B82F6"
+    if score >= 9.0: return "Critical", "#EF4444"
+    if score >= 7.0: return "High", "#F97316"
+    if score >= 4.0: return "Medium", "#EAB308"
+    return "Low", "#3B82F6"
+
+@app.get("/api/v1/dashboard")
+async def get_dashboard_data(request: Request):
+    pool = request.app.state.pool
+    try:
+        async with pool.acquire() as conn:
+            # 1. 100% REAL DB METRICS WITH EXPLICIT PENDING COUNT
+            kpi_row = await conn.fetchrow("""
+                SELECT 
+                    COALESCE(SUM(cost), 0) / NULLIF(COUNT(*), 0) as raw_avg_cost,
+                    SUM(time_taken) / NULLIF(COUNT(*), 0) as raw_avg_mttr,
+                    COUNT(CASE WHEN resolved = true THEN 1 END) as total_solved,
+                    COUNT(CASE WHEN resolved = false OR resolved IS NULL THEN 1 END) as pending_vulns,
+                    COUNT(*) as total_vulns,
+                    COALESCE(SUM(token), 0) as total_tokens
+                FROM vulnerability
+            """)
+            
+            total_solved = int(kpi_row['total_solved'] or 0)
+            pending_vulns = int(kpi_row['pending_vulns'] or 0)
+            total_vulns = int(kpi_row['total_vulns'] or 0)
+            
+            # CALCULATING TRUE SUCCESS RATE
+            success_rate = round((total_solved / total_vulns) * 100, 1) if total_vulns > 0 else 0
+
+            # 2. Severities (Real DB Data)
+            severities_rows = await conn.fetch("SELECT score FROM vulnerability")
+            severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
+            for row in severities_rows:
+                label, _ = get_severity_label_and_color(float(row['score']))
+                severity_counts[label] += 1
+                
+            severities_data = [
+                {"name": "Critical", "value": severity_counts["Critical"], "color": "#EF4444"},
+                {"name": "High", "value": severity_counts["High"], "color": "#F97316"},
+                {"name": "Medium", "value": severity_counts["Medium"], "color": "#EAB308"},
+                {"name": "Low", "value": severity_counts["Low"], "color": "#3B82F6"}
+            ]
+
+            # 3. Token Chart (Real DB Data)
+            tokens_rows = await conn.fetch("""
+                SELECT 
+                    TO_CHAR(DATE_TRUNC('hour', start_time), 'Mon DD, HH:MI AM') as time, 
+                    SUM(token) as tokens
+                FROM vulnerability 
+                WHERE start_time IS NOT NULL
+                GROUP BY DATE_TRUNC('hour', start_time) 
+                ORDER BY DATE_TRUNC('hour', start_time) ASC
+            """)
+            tokens_data = [{"time": r['time'], "tokens": r['tokens']} for r in tokens_rows]
+            if not tokens_data: tokens_data = [{"time": "No Data", "tokens": 0}]
+
+            # 4. Activity Log (Real DB Data)
+            recent_rows = await conn.fetch("""
+                SELECT cve_id, asset_id, score, resolved, end_time, start_time
+                FROM vulnerability 
+                ORDER BY COALESCE(end_time, start_time) DESC 
+                LIMIT 10
+            """)
+            
+            recent_activity = []
+            for r in recent_rows:
+                label, _ = get_severity_label_and_color(float(r['score']))
+                timestamp = r['end_time'] if r['resolved'] else r['start_time']
+                recent_activity.append({
+                    "id": r['cve_id'] or r['asset_id'],
+                    "name": f"Vulnerability on {r['asset_id']}",
+                    "severity": label,
+                    "status": "Resolved" if r['resolved'] else "Pending",
+                    "time": timestamp.strftime('%H:%M %p') if timestamp else "N/A"
+                })
+
+            return {
+                "kpis": {
+                    "avg_cost": float(kpi_row['raw_avg_cost'] or 0),
+                    "avg_mttr": format_mttr(kpi_row['raw_avg_mttr']),
+                    "total_vulns": total_vulns,
+                    "total_solved": total_solved,
+                    "total_tokens": int(kpi_row['total_tokens']),
+                    "success_rate": success_rate,
+                    "pending_vulns": pending_vulns
+                },
+                "tokens": tokens_data,
+                "severities": severities_data,
+                "recent_activity": recent_activity
+            }
+    except Exception as e:
+        print(f"[API ERROR] Dashboard Data: {str(e)}")
+        return {"error": str(e)}
