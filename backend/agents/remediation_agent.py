@@ -13,8 +13,9 @@ from dotenv import load_dotenv
 from typing import Optional, Annotated, Any, Dict
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-from jira_workflow_manager import create_jira_issue, transition_jira_issue, add_jira_comment
-from system_prompts import research_system_prompt
+from .jira_workflow_manager import create_jira_issue, transition_jira_issue, add_jira_comment
+from .system_prompts import research_system_prompt
+from pathlib import Path
 
 import os
 import asyncio
@@ -28,6 +29,12 @@ import operator
 import boto3
 
 load_dotenv()
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DB_PATH = PROJECT_ROOT / "state_db.sqlite"
+
+# Clean path formatting for Windows compatibility (strip any URI parameters)
+clean_path = str(DB_PATH).replace("\\", "/")
 
 GITHUB_TOKEN = os.environ["GITHUB_MCP_TOKEN"]
 
@@ -207,7 +214,7 @@ git_retry_policy = RetryPolicy(
 
 async def update_workflow_state(thread_id: str, status: str):
     # Removed the verbose print statement from here to avoid polluting agent execution logs
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
         await db.execute(
             """
             INSERT OR REPLACE INTO workflow_state
