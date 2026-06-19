@@ -16,7 +16,7 @@ import os
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
-from backend.agents.remediation_agent import build_graph, initialize_agent_components
+from agents.remediation_agent import build_graph, initialize_agent_components
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DB_PATH = str(PROJECT_ROOT / "state_db.sqlite")

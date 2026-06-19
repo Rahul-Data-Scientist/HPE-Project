@@ -30,7 +30,7 @@ import boto3
 
 load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "state_db.sqlite"
 
 # Clean path formatting for Windows compatibility (strip any URI parameters)
