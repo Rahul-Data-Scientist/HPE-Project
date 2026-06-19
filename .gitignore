@@ -2,3 +2,5 @@ Initial Trials
 .env
 hpe-project-key.pem
 rough.ipynb
+
+__pycache__/

@@ -1,0 +1,95 @@
+ List of tables
+ Schema |         Name          | Type  |   Owner
+--------+-----------------------+-------+-----------
+ public | asset_vulnerabilities | table | abhimanyu
+ public | assets                | table | abhimanyu
+ public | vulnerabilities       | table | abhimanyu
+ public | vulnerability_intel   | table | Abhimanyu
+
+
+
+
+
+Table "public.asset_vulnerabilities"
+      Column      |            Type             | Collation | Nullable | Default
+------------------+-----------------------------+-----------+----------+---------
+ asset_id         | uuid                        |           | not null |
+ vuln_id          | character varying(255)      |           | not null |
+ severity_raw     | character varying(20)       |           |          |
+ severity_score   | double precision            |           |          |
+ component        | character varying(255)      |           |          |
+ affected_version | character varying(100)      |           |          |
+ port             | integer                     |           |          |
+ fix_available    | integer                     |           | not null | 0
+ first_seen       | timestamp without time zone |           | not null | now()
+ last_seen        | timestamp without time zone |           | not null | now()
+ priority_score   | double precision            |           |          |
+ priority_level   | character varying(10)       |           |          |
+Indexes:
+    "uq_asset_vuln" UNIQUE CONSTRAINT, btree (asset_id, vuln_id)
+Foreign-key constraints:
+    "asset_vulnerabilities_asset_id_fkey" FOREIGN KEY (asset_id) REFERENCES assets(asset_id) ON DELETE CASCADE
+    "asset_vulnerabilities_vuln_id_fkey" FOREIGN KEY (vuln_id) REFERENCES vulnerabilities(vuln_id) ON DELETE CASCADE
+
+
+
+
+Table "public.assets"
+         Column          |            Type             | Collation | Nullable |           Default
+-------------------------+-----------------------------+-----------+----------+------------------------------
+ asset_id                | uuid                        |           | not null |
+ ip_address              | inet                        |           |          |
+ hostname                | character varying(255)      |           |          |
+ instance_id             | character varying(255)      |           |          |
+ inferred_role           | character varying(100)      |           |          |
+ exposure_score          | double precision            |           | not null | 0.0
+ environment             | character varying(50)       |           | not null | 'unknown'::character varying
+ cloud_type              | character varying(50)       |           |          |
+ dependency_level        | character varying(20)       |           | not null | 'medium'::character varying
+ dependency_score        | double precision            |           | not null | 0.0
+ asset_criticality_score | double precision            |           | not null | 0.0
+ first_seen              | timestamp without time zone |           | not null | now()
+ last_seen               | timestamp without time zone |           | not null | now()
+Indexes:
+    "assets_pkey" PRIMARY KEY, btree (asset_id)
+Referenced by:
+    TABLE "asset_vulnerabilities" CONSTRAINT "asset_vulnerabilities_asset_id_fkey" FOREIGN KEY (asset_id) REFERENCES assets(asset_id) ON DELETE CASCADE
+
+
+
+
+
+
+Table "public.vulnerabilities"
+     Column     |          Type          | Collation | Nullable | Default
+----------------+------------------------+-----------+----------+---------
+ vuln_id        | character varying(255) |           | not null |
+ title          | character varying(500) |           | not null |
+ description    | text                   |           |          |
+ cvss_score     | double precision       |           |          |
+ cvss_vector    | character varying(255) |           |          |
+ fix_version    | character varying(100) |           |          |
+ published_date | date                   |           |          |
+Indexes:
+    "vulnerabilities_pkey" PRIMARY KEY, btree (vuln_id)
+Referenced by:
+    TABLE "asset_vulnerabilities" CONSTRAINT "asset_vulnerabilities_vuln_id_fkey" FOREIGN KEY (vuln_id) REFERENCES vulnerabilities(vuln_id) ON DELETE CASCADE
+    TABLE "vulnerability_intel" CONSTRAINT "vulnerability_intel_vuln_id_fkey" FOREIGN KEY (vuln_id) REFERENCES vulnerabilities(vuln_id) ON DELETE CASCADE
+
+
+
+
+
+ Table "public.vulnerability_intel"
+     Column     |            Type             | Collation | Nullable | Default
+----------------+-----------------------------+-----------+----------+---------
+ vuln_id        | character varying(255)      |           | not null |
+ epss_score     | double precision            |           | not null | 0.0
+ kev_flag       | integer                     |           | not null | 0
+ exploit_exists | integer                     |           | not null | 0
+ exploit_count  | integer                     |           | not null | 0
+ last_updated   | timestamp without time zone |           | not null | now()
+Indexes:
+    "vulnerability_intel_pkey" PRIMARY KEY, btree (vuln_id)
+Foreign-key constraints:
+    "vulnerability_intel_vuln_id_fkey" FOREIGN KEY (vuln_id) REFERENCES vulnerabilities(vuln_id) ON DELETE CASCADE

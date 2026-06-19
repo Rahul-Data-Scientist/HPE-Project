@@ -1,0 +1,165 @@
+Final Formulae :
+
+Priority Score =
+  (CVSS × 0.25) 0-10/10
+* (EPSS × 0.20) 0-1
+* (KEV × 0.20) 0-1
+* (Asset Criticality × 0.25) 0-1
+* (Fix Availability × 0.05) 0-1  -> after patch gen -> update it to = 1
+* (Vulnerability Age × 0.05) 
+
+Framing:
+
+CVSS alone is not enough to prioritize vulnerabilities because it only measures theoretical technical severity. In real-world environments, we also need to consider whether attackers are actually exploiting the vulnerability, how likely exploitation is, how critical the affected asset is to the business, and whether remediation is immediately possible.
+
+So we designed a multi-factor priority model combining technical severity, threat intelligence, business impact, and operational remediation context.
+
+1. CVSS (25%) (Common Vulnerability Scoring System)
+
+Represents technical severity of the vulnerability.
+
+Examples:
+* RCE
+* Privilege Escalation
+* Authentication Bypass
+* DoS
+Example:
+CVSS = 9.8 → very severe
+CVSS = 5.0 → moderate
+
+Why:
+CVSS is the baseline technical risk signal. Without it, the system ignores actual technical impact.
+Why 25%:
+Important enough to strongly influence priority, but not enough to dominate the score alone.
+
+
+2. EPSS (20%) (Exploit Prediction Scoring System)
+
+Represents probability of exploitation.
+
+Range:
+0 → low probability
+1 → high probability
+
+Example:
+EPSS = 0.85 → high exploitation likelihood
+
+Why:
+Many high CVSS vulnerabilities are never actually exploited. EPSS helps answer:
+“Will attackers realistically use this?”
+Why 20%:
+Because exploitation likelihood is almost as important as severity.
+
+
+3. KEV (20%) (Known Exploited Vulnerabilities)
+
+Known Exploited Vulnerabilities catalog.
+
+Logic:
+Present in KEV → 1
+Not present → 0
+
+Example:
+CVE in KEV → attackers already exploiting it
+
+Why:
+This is a strong real-world threat signal. Active exploitation matters more than theoretical assumptions.
+Why 20%:
+Because real attacker activity should heavily affect priority.
+
+
+4. Asset Criticality (25%)
+
+Represents business importance of the affected asset.
+
+Examples:
+* Payment server
+* Production DB
+* IAM system
+* Customer-facing API
+* Test VM
+
+
+Example:
+Same CVE on prod payment server vs unused dev VM = very different risk
+
+Why:
+Technical severity alone doesn’t reflect business impact.
+Why 25%:
+Business context should matter as much as technical severity.
+
+
+5. Fix Availability (5%)
+
+Checks whether remediation is immediately possible.
+
+Logic:
+Fix available → 1
+No fix → 0
+
+Example:
+Patch exists → fix immediately
+No patch → compensating controls needed
+
+Why:
+Helps remediation planning.
+Why 5%:
+Fix availability affects operations, not actual vulnerability risk.
+
+
+6. Vulnerability Age (5%)
+
+Measures how long the vulnerability has remained unresolved.
+
+Example:
+30 days old
+180 days old
+365+ days old
+(last_seen - first_seen) / 365 -> 180/365 ~= 0.5 * 0.05 
+Meaning:
+Older unresolved vulnerabilities may indicate delayed remediation and larger exposure windows.
+
+Why:
+Helps gradually push older unresolved issues upward.
+Why 5%:
+Age is a secondary signal. A new actively exploited vuln can still be much riskier than an old medium one.
+
+
+
+
+
+Weighting Logic:
+
+1. Threat Intelligence + Technical Risk (65%)
+   CVSS = 25%
+   EPSS = 20%
+   KEV = 20%
+
+These answer:
+* How severe is it?
+* How likely is exploitation?
+* Are attackers already exploiting it?
+
+Highest weight because these directly reflect security risk.
+
+2. Business Context (25%)
+   Asset Criticality = 25%
+
+This answers:
+* How important is the affected asset?
+
+Same vuln on critical prod vs dev machine should not rank equally.
+
+3. Operational Context (10%)
+   Fix Availability = 5%
+   Vulnerability Age = 5%
+
+These answer:
+* Can we fix it now?
+* Has it remained unresolved too long?
+
+Useful for remediation workflow, but should not dominate risk scoring.
+
+Can Say This:
+
+We designed the vulnerability priority model using three categories of signals. First, technical and threat intelligence signals like CVSS, EPSS, and KEV, which together measure severity, exploitation likelihood, and active attacker activity. Second, business context through asset criticality, since the same vulnerability has different impact depending on where it exists. Third, operational context through fix availability and vulnerability age, which help remediation planning but should have smaller influence than actual security risk.
