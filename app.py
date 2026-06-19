@@ -10,11 +10,17 @@ from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
+from pathlib import Path
+import os
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
-from remediation_agent import build_graph, initialize_agent_components
+from backend.agents.remediation_agent import build_graph, initialize_agent_components
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+DB_PATH = str(PROJECT_ROOT / "state_db.sqlite")
+clean_path = str(DB_PATH).replace("\\", "/")
 
 RUNNING = "RUNNING"
 WAITING_FOR_HUMAN_APPROVAL = "WAITING_FOR_HUMAN_APPROVAL"
@@ -24,7 +30,7 @@ RESUMING = "RESUMING"
 
 async def update_workflow_state(thread_id: str, status: str):
     # Suppressed verbose stdout state logs for presentation
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
         await db.execute(
             """
             INSERT OR REPLACE INTO workflow_state
@@ -36,7 +42,7 @@ async def update_workflow_state(thread_id: str, status: str):
         await db.commit()
 
 async def claim_workflow_for_resume(thread_id: str) -> bool:
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
         cursor = await db.execute(
             """
             UPDATE workflow_state
@@ -50,7 +56,7 @@ async def claim_workflow_for_resume(thread_id: str) -> bool:
         return cursor.rowcount == 1
 
 async def get_workflow_state(thread_id: str) -> str | None:
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
         async with db.execute("SELECT status FROM workflow_state WHERE thread_id = ?", (thread_id,)) as cursor:
             row = await cursor.fetchone()
     return row[0] if row else None
@@ -65,7 +71,7 @@ async def get_pr_number(payload):
 async def get_thread_id_by_pr(pr_number: int) -> str | None:
     if pr_number is None:
         return None
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
         async with db.execute("SELECT thread_id FROM pr_mappings WHERE pr_number = ?", (pr_number,)) as cursor:
             row = await cursor.fetchone()
             if row:
@@ -77,7 +83,7 @@ async def resume_agent_background(thread_id: str):
     try:
         await update_workflow_state(thread_id, RUNNING)
 
-        async with AsyncSqliteSaver.from_conn_string("state_db.sqlite") as checkpointer:
+        async with AsyncSqliteSaver.from_conn_string(clean_path) as checkpointer:
             github_workflow_agent = await build_graph(checkpointer=checkpointer)
             agent_stream = github_workflow_agent.astream(Command(resume=True), config=config, stream_mode="updates")
             
@@ -95,7 +101,9 @@ async def resume_agent_background(thread_id: str):
         print(f"[CRITICAL ERROR] Execution failed: {e}")
 
 async def init_database():
-    async with aiosqlite.connect("state_db.sqlite") as db:
+    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
+        await db.execute("PRAGMA journal_mode=WAL;")
+
         await db.execute("CREATE TABLE IF NOT EXISTS pr_mappings (pr_number INTEGER PRIMARY KEY, thread_id TEXT NOT NULL)")
         await db.execute("CREATE TABLE IF NOT EXISTS workflow_state (thread_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL)")
         await db.commit()
@@ -137,7 +145,7 @@ async def start_agent_workflow(payload: AgentVulnerabilityInput):
     async def event_generator():
         try:
             await update_workflow_state(thread_id, RUNNING)
-            async with AsyncSqliteSaver.from_conn_string("state_db.sqlite") as checkpointer:
+            async with AsyncSqliteSaver.from_conn_string(clean_path) as checkpointer:
                 github_workflow_agent = await build_graph(checkpointer=checkpointer)
                 
                 async for event in github_workflow_agent.astream(initial_state, config=config, stream_mode="updates"):
