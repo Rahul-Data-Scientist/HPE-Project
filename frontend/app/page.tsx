@@ -115,7 +115,7 @@ export default function ExecutiveDashboard() {
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-6 min-h-[calc(100vh-4rem)] flex flex-col font-sans">
       
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-2">
+      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Executive Telemetry</h1>
           <p className="text-slate-500 mt-1 font-medium text-sm md:text-base">
@@ -172,7 +172,7 @@ export default function ExecutiveDashboard() {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-2">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <Card className="shadow-sm lg:col-span-3">
           <CardHeader className="border-b border-slate-100 pb-4">
             <CardTitle className="text-base font-bold text-slate-900">Historical Token Consumption</CardTitle>
