@@ -895,7 +895,7 @@ def _connect():
         dbname   = os.environ["DB_NAME"],
         user     = os.environ["DB_USER"],
         password = os.environ["DB_PASSWORD"],
-        sslmode  = os.environ.get("DB_SSLMODE", "disable"),
+        sslmode  = os.environ.get("DB_SSLMODE", "require"),
         connect_timeout = 10,
     )
 
