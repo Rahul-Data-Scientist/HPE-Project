@@ -5,7 +5,7 @@ import glob
 import time
 import importlib
 from typing import List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pandas as pd
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, START, END, MessagesState
@@ -81,7 +81,9 @@ def inspect_data(state: NormalizationState):
 
 
 class FunctionSchema(BaseModel):
-    function: str
+    function: str = Field(
+        description="The complete, entire executable Python function code for `normalize_data(df)`. This must include the function definition `def normalize_data(df):`, the full logical body using Pandas, and the return statement. Do not just return the function name."
+    )
 
 llm = ChatOpenAI(model="gpt-4.1-mini").with_structured_output(FunctionSchema)
 
@@ -186,7 +188,7 @@ def execute_generated_code(state: NormalizationState):
 def merge_normalized_csvs(state: NormalizationState):
     """
     Executes right before END. Combines all processed files from 
-    'normalized_csvs/' folder into a single unified 'working.csv'.
+    'normalized_output/' folder into a single unified 'working.csv'.
     """
     target_dir = os.path.join(BACKEND_DIR, "normalized_output")
     search_pattern = os.path.join(target_dir, "*_normalized.csv")
@@ -219,6 +221,10 @@ def route_after_orchestrator(state: NormalizationState):
 def should_retry(state: NormalizationState):
     if state.get("error_message") == "SUCCESS":
         return "Next File / Limit Reached"
+    
+    # Add this print statement to debug the actual code failure!
+    print(f"[Validation Failure] {state.get('error_message')}")
+    
     if state.get("retry_count", 0) >= 3:
         print(f"Max validation cycles reached for {state['file_path']}. Skipping.")
         return "Next File / Limit Reached"

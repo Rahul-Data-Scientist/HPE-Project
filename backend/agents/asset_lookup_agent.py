@@ -1,3 +1,4 @@
+from .asset_criticality_agent import criticality_graph
 # %% [markdown]
 # # Agent 1 — Asset Lookup Agent
 # 
@@ -52,14 +53,23 @@ import pandas as pd
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
+from pathlib import Path
 
 from langgraph.graph import StateGraph, END
-from .asset_criticality_agent import criticality_graph
 
-load_dotenv(override=True)   # reads .env in cwd
+load_dotenv()   
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("asset_lookup")
+
+# 1. Get the absolute path of the file you are running right now (asset_lookup_agent.py)
+CURRENT_FILE = Path(__file__).resolve()
+
+# 2. Go up one level to reach the 'backend' root directory
+BACKEND_DIR = CURRENT_FILE.parent.parent 
+
+# 3. Explicitly target the CSV file inside backend/normalized_output/
+WORKING_CSV_PATH = BACKEND_DIR / "normalized_output" / "working.csv"
 
 
 # %%
@@ -349,13 +359,13 @@ def load_csv(state: AssetLookupState) -> AssetLookupState:
         ].copy()
 
         if not invalid_assets.empty:
-            invalid_assets["rejection_reason"] = "NO_IDENTIFIER"
-            os.makedirs("backend/rejected_records", exist_ok=True)
+            REJECTED_DIR = BACKEND_DIR / "rejected_records"
+            REJECTED_DIR.mkdir(parents=True, exist_ok=True)
 
             invalid_assets.to_csv(
-                "backend/rejected_records/rejected_asset_records.csv",
+                str(REJECTED_DIR / "rejected_asset_records.csv"),
                 mode="a",
-                header=not os.path.exists("backend/rejected_records/rejected_asset_records.csv"),
+                header=not (REJECTED_DIR / "rejected_asset_records.csv").exists(),
                 index=False
             )
 
@@ -654,8 +664,10 @@ def save_csv(state: AssetLookupState) -> AssetLookupState:
     df   = _csv_cache["df"]
     path = state["working_csv"]
 
+
     try:
-        os.makedirs("backend/normalized_output", exist_ok=True)
+        OUTPUT_DIR = BACKEND_DIR / "normalized_output"
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         df.to_csv(path, index=False)
         log.info("[save_csv] Saved %d rows → %s", len(df), path)
     except Exception as e:
@@ -780,42 +792,42 @@ asset_lookup_graph = builder.compile()
 print("Graph compiled ✓")
 
 # %%
-initial_state: AssetLookupState = {
-    "working_csv":      "backend/normalized_output/working.csv",
-    "status":           "running",
-    "error":            None,
-    "new_count":        0,
-    "existing_count":   0,
-}
+# initial_state: AssetLookupState = {
+#     "working_csv":      "backend/normalized_output/working.csv",
+#     "status":           "running",
+#     "error":            None,
+#     "new_count":        0,
+#     "existing_count":   0,
+# }
 
-final_state = asset_lookup_graph.invoke(initial_state)
+# final_state = asset_lookup_graph.invoke(initial_state)
 
-print("\n=== Asset Lookup Agent — Final State ===")
-print(json.dumps(final_state, indent=2))
+# print("\n=== Asset Lookup Agent — Final State ===")
+# print(json.dumps(final_state, indent=2))
 
-if final_state["status"] == "done":
-    print(f"\n✅ Success — {final_state['existing_count']} existing + {final_state['new_count']} new assets")
-    print(f"   CSV enriched and saved → {final_state['working_csv']}")
-    print("   Hand state to Agent 2 (Asset Criticality Agent)")
-else:
-    print(f"\n❌ Error: {final_state.get('error')}")
+# if final_state["status"] == "done":
+#     print(f"\n✅ Success — {final_state['existing_count']} existing + {final_state['new_count']} new assets")
+#     print(f"   CSV enriched and saved → {final_state['working_csv']}")
+#     print("   Hand state to Agent 2 (Asset Criticality Agent)")
+# else:
+#     print(f"\n❌ Error: {final_state.get('error')}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# STANDALONE RUN
-# ═══════════════════════════════════════════════════════════════════════════
+# # ═══════════════════════════════════════════════════════════════════════════
+# # STANDALONE RUN
+# # ═══════════════════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    initial_state: AssetLookupState = {
-        "working_csv": "backend/normalized_output/working.csv",
-        "status": "running",
-        "error": None,
-        "new_count": 0,
-        "existing_count": 0,
-    }
+#     initial_state: AssetLookupState = {
+#         "working_csv": str(WORKING_CSV_PATH),
+#         "status": "running",
+#         "error": None,
+#         "new_count": 0,
+#         "existing_count": 0,
+#     }
 
-    final_state = asset_lookup_graph.invoke(initial_state)
+#     final_state = asset_lookup_graph.invoke(initial_state)
 
-    print("\n=== Asset Lookup Agent — Final State ===")
-    print(json.dumps(final_state, indent=2))
+#     print("\n=== Asset Lookup Agent — Final State ===")
+#     print(json.dumps(final_state, indent=2))

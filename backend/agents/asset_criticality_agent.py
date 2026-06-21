@@ -1,3 +1,4 @@
+from langchain_google_genai import ChatGoogleGenerativeAI
 # %% [markdown]
 # # Agent 2 — Asset Criticality Agent
 # 
@@ -22,7 +23,7 @@ from urllib.parse import urlparse
 import pandas as pd
 import psycopg2, psycopg2.extras
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from pathlib import Path
 
 from langgraph.graph import StateGraph, END
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +31,11 @@ import threading
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("asset_criticality")
+
+
+CURRENT_FILE = Path(__file__).resolve()
+BACKEND_DIR = CURRENT_FILE.parent.parent 
+WORKING_CSV_PATH = BACKEND_DIR / "normalized_output" / "working.csv"
 
 
 # %%
@@ -1299,7 +1305,7 @@ print("✓ Graph compiled")
 if __name__ == "__main__":
 
     initial_state: CriticalityState = {
-        "working_csv": "backend/normalized_output/working.csv",
+        "working_csv": str(WORKING_CSV_PATH),
         "status": "running",
         "error": None,
         "processed": 0,
