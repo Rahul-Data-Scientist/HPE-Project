@@ -62,7 +62,7 @@ export default function ExecutiveDashboard() {
     };
 
     fetchDashboardData();
-    const intervalId = setInterval(fetchDashboardData, 5000);
+    const intervalId = setInterval(fetchDashboardData, 10000);
     return () => { isMounted = false; clearInterval(intervalId); };
   }, []);
 
@@ -132,7 +132,7 @@ export default function ExecutiveDashboard() {
       {/* Transient Error Banner (Shows if connection drops but we still have old data) */}
       {!isConnected && errorMessage && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <AlertCircle className="h-5 w-5 shrink-0" />
           <span>Real-time sync paused. Displaying last known data. {errorMessage}</span>
         </div>
       )}

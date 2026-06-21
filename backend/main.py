@@ -233,6 +233,7 @@ async def process_single_task():
                             continue
                         logged_nodes.add("github_workflow")
 
+                    # Sending node name to the frontend terminal.
                     log_msg = NODE_LOG_MAP.get(node_name, f"[SYSTEM] Executing {node_name}...")
                     await manager.broadcast({"asset_id": asset_id, "node": node_name, "log": log_msg})
 

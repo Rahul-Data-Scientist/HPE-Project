@@ -101,7 +101,7 @@ export default function Sidebar() {
           return (
             <Link key={item.name} href={item.href} title={isCollapsed ? item.name : undefined}>
               <div 
-                className={`relative flex items-center ${isCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 rounded-lg transition-colors duration-200 group
+                className={`relative flex items-center ${isCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 rounded-md transition-colors duration-200 group
                   ${isActive 
                     ? 'bg-[#01A982]/10 text-white' 
                     : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
