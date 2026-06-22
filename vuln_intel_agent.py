@@ -147,7 +147,7 @@ def _download_epss_json_bulk(session: requests.Session, page_size: int = 10000) 
         print(f"  EPSS JSON bulk error: {exc}")
     return result
 
-def _fetch_single_epss_score(cve_id: str, session: requests.Session) -> float:
+def _fetch_single_epss_score(cve_id: str, session: requests.Session):
     """
     Last-resort fallback: single CVE lookup via FIRST EPSS API.
     Used only when all bulk methods have failed AND this specific CVE is not in the dict.
@@ -161,7 +161,7 @@ def _fetch_single_epss_score(cve_id: str, session: requests.Session) -> float:
                 return float(items[0].get("epss", 0.0))
     except Exception as exc:
         print(f"  Single EPSS lookup failed for {cve_id}: {exc}")
-    return 0.0
+    return None
 
 def download_epss_scores() -> dict:
     """
@@ -326,6 +326,25 @@ def run_vuln_intel_agent(csv_file_path: str):
         if col not in df.columns:
             df[col] = 0.0 if col == "epss_score" else 0
 
+    # ------ Fetch Database Fallback ------
+    db_intel_fallback = {}
+    try:
+        session = get_db_session()
+        query_result = session.execute(
+            vulnerability_intel_table.select().where(vulnerability_intel_table.c.vuln_id.in_(vuln_ids))
+        ).fetchall()
+        for row in query_result:
+            db_intel_fallback[row.vuln_id] = {
+                "epss_score": row.epss_score,
+                "kev_flag": row.kev_flag,
+                "exploit_exists": row.exploit_exists,
+                "exploit_count": row.exploit_count
+            }
+    except Exception as exc:
+        print(f"Database fallback query error: {exc}")
+    finally:
+        session.close()
+
     records_to_upsert = []
     current_time = datetime.utcnow()
 
@@ -338,11 +357,28 @@ def run_vuln_intel_agent(csv_file_path: str):
         # EPSS: bulk dict first, per-CVE API only if CVE not in bulk data
         epss_score = epss_scores.get(vuln_id)
         if epss_score is None:
-            print(f"  EPSS fallback (per-CVE) for {vuln_id}...")
+            print(f"  EPSS bulk failed or missing. Trying per-CVE API for {vuln_id}...")
             epss_score = _fetch_single_epss_score(vuln_id, fallback_session)
 
-        kev_flag = 1 if vuln_id in kev_cves else 0
-        exploit_exists, exploit_count = check_exploit_info(vuln_id, bool(kev_flag), exploit_db_map)
+        # If per-CVE API failed (or timed out), fallback to DB
+        if epss_score is None:
+            if vuln_id in db_intel_fallback:
+                print(f"  EPSS API completely failed. Falling back to DB cache for {vuln_id}...")
+                epss_score = db_intel_fallback[vuln_id]["epss_score"]
+            else:
+                epss_score = 0.0
+
+        # KEV and ExploitDB: If bulk lists are completely empty, we assume APIs failed
+        if not kev_cves and vuln_id in db_intel_fallback:
+            kev_flag = db_intel_fallback[vuln_id]["kev_flag"]
+        else:
+            kev_flag = 1 if vuln_id in kev_cves else 0
+
+        if not exploit_db_map and vuln_id in db_intel_fallback:
+            exploit_exists = db_intel_fallback[vuln_id]["exploit_exists"]
+            exploit_count = db_intel_fallback[vuln_id]["exploit_count"]
+        else:
+            exploit_exists, exploit_count = check_exploit_info(vuln_id, bool(kev_flag), exploit_db_map)
 
         df.at[index, "epss_score"]    = epss_score
         df.at[index, "kev_flag"]      = kev_flag
@@ -368,7 +404,7 @@ def run_vuln_intel_agent(csv_file_path: str):
         print(f"Batch upserting {len(unique_records)} intel records to DB...")
         session = get_db_session()
         try:
-            stmt = pg_insert(vulnerability_intel_table).values(unique_records)
+            stmt = pg_insert(vulnerability_intel_table)
             update_cols = {
                 col.name: stmt.excluded[col.name]
                 for col in vulnerability_intel_table.columns
@@ -378,7 +414,7 @@ def run_vuln_intel_agent(csv_file_path: str):
                 index_elements=["vuln_id"],
                 set_=update_cols
             )
-            session.execute(stmt)
+            session.execute(stmt, unique_records)
             session.commit()
             print("Batch upsert completed successfully.")
         except Exception as exc:
