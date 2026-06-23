@@ -37,3 +37,5 @@ backend/parsed_csvs
 backend/Raw Scanner Outputs
 backend/normalized_output
 backend/rejected_records
+.venv
+backend/raw_scanner_outputs
