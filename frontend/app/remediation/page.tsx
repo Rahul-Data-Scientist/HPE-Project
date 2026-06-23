@@ -53,6 +53,8 @@ export default function RemediationCommandCenter() {
   const socketRef = useRef<WebSocket | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+
+
   // Auto-advance to final pipeline step when everything is resolved
   useEffect(() => {
     if (
@@ -62,6 +64,29 @@ export default function RemediationCommandCenter() {
       setPipelineStep(4);
     }
   }, [vulnerabilities]);
+
+
+  // --- NEW: PERSISTENCE SYNC ON LOAD ---
+  useEffect(() => {
+    const syncState = async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:8000/api/v1/system-state");
+        const data = await response.json();
+        
+        if (data.vulnerabilities && data.vulnerabilities.length > 0) {
+          setFileUploaded(true);
+          setVulnerabilities(data.vulnerabilities);
+          // If an active task is found, expand it automatically
+          if (data.active_task) {
+            setExpandedVulnId(data.active_task.asset_id);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not sync with backend. Is the server running?");
+      }
+    };
+    syncState();
+  }, []);
 
   // --- WEBSOCKET CONNECTION ---
   useEffect(() => {
