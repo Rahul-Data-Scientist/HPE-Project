@@ -19,8 +19,9 @@ interface LogMessage {
 }
 
 interface Vulnerability {
-  asset_id: string; // The unique backend tracking ID (e.g., VULN-xyz123)
-  vuln_id: string;  // The human-readable display ID (e.g., CVE-2026-3592)
+  thread_id: string;
+  asset_id?: string; // The unique backend tracking ID (e.g., VULN-xyz123)
+  vuln_id: string; // The human-readable display ID (e.g., CVE-2026-3592)
   score: number;
   severity?: string;
   status: string; // PENDING, IN_PROGRESS, WAITING_FOR_APPROVAL, RESOLVED
@@ -53,7 +54,8 @@ export default function RemediationCommandCenter() {
   const socketRef = useRef<WebSocket | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-
+  // Add this right below your other state declarations (around line 45)
+const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   // Auto-advance to final pipeline step when everything is resolved
   useEffect(() => {
@@ -65,20 +67,21 @@ export default function RemediationCommandCenter() {
     }
   }, [vulnerabilities]);
 
-
   // --- NEW: PERSISTENCE SYNC ON LOAD ---
   useEffect(() => {
     const syncState = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:8000/api/v1/system-state");
+        const response = await fetch(
+          "http://127.0.0.1:8000/api/v1/system-state",
+        );
         const data = await response.json();
-        
+
         if (data.vulnerabilities && data.vulnerabilities.length > 0) {
           setFileUploaded(true);
           setVulnerabilities(data.vulnerabilities);
           // If an active task is found, expand it automatically
           if (data.active_task) {
-            setExpandedVulnId(data.active_task.asset_id);
+            setExpandedVulnId(data.active_task.thread_id);
           }
         }
       } catch (err) {
@@ -116,7 +119,9 @@ export default function RemediationCommandCenter() {
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
+          // const data = JSON.parse(event.data);
+          const safeData = event.data.replace(/:\s*NaN/g, ": null");
+          const data = JSON.parse(safeData);
 
           // 1. Pipeline General Updates
           if (data.step && PIPELINE_STEPS.includes(data.step)) {
@@ -138,12 +143,19 @@ export default function RemediationCommandCenter() {
               const score = v.score || v.priority_score || 0;
               return {
                 ...v,
+                thread_id: v.thread_id,
                 asset_id: v.asset_id, // Use for tracking
                 vuln_id: v.vuln_id || v.cve_id || v.asset_id, // Use for UI display (fallback to asset_id if CVE missing)
                 score: score,
                 severity:
                   v.severity ||
-                  (score >= 9 ? "Critical" : score >= 7 ? "High" : score >= 4 ? "Medium" : "Low"),
+                  (score >= 9
+                    ? "Critical"
+                    : score >= 7
+                      ? "High"
+                      : score >= 4
+                        ? "Medium"
+                        : "Low"),
                 status: v.status || "PENDING",
               };
             });
@@ -152,44 +164,66 @@ export default function RemediationCommandCenter() {
           }
 
           // 4. Unified Vulnerability State Updates (tracked by asset_id)
-          const currentId = data.asset_id;
-          
+          const currentId = data.thread_id;
+
           if (currentId) {
             setVulnerabilities((prev) => {
-              const exists = prev.find((v) => v.asset_id === currentId);
-              
+              const exists = prev.find((v) => v.thread_id === currentId);
+
               // Determine active step mapping
-              let updatedStep = exists?.active_step || "generate_remediation_script";
-              if (data.node && REMEDIATION_STEPS.some((step) => step.id === data.node)) {
+              let updatedStep =
+                exists?.active_step || "generate_remediation_script";
+              if (
+                data.node &&
+                REMEDIATION_STEPS.some((step) => step.id === data.node)
+              ) {
                 updatedStep = data.node;
               }
 
               // Determine exact status
-              let updatedStatus = data.status || exists?.status || "IN_PROGRESS";
-              
-              // Handle specific backend overrides seamlessly 
-              if (data.type === "ACTION_REQUIRED" || data.node === "wait_for_human_approval") {
+              let updatedStatus =
+                data.status || exists?.status || "IN_PROGRESS";
+
+              // Handle specific backend overrides seamlessly
+              if (
+                data.type === "ACTION_REQUIRED" ||
+                data.node === "wait_for_human_approval"
+              ) {
                 updatedStatus = "WAITING_FOR_APPROVAL";
                 updatedStep = "wait_for_human_approval";
-              } else if (data.status === "COMPLETED" || data.node === "calculate_tokens_and_cost_consumption") {
+              } else if (
+                data.status === "COMPLETED" ||
+                data.node === "calculate_tokens_and_cost_consumption"
+              ) {
                 updatedStatus = "RESOLVED";
                 updatedStep = "calculate_tokens_and_cost_consumption";
               }
 
               if (exists) {
                 return prev.map((v) =>
-                  v.asset_id === currentId
+                  v.thread_id === currentId
                     ? { ...v, status: updatedStatus, active_step: updatedStep }
                     : v,
                 );
               } else {
+                const incomingScore = data.score || 0;
+                const dynamicSeverity =
+                  incomingScore >= 9
+                    ? "Critical"
+                    : incomingScore >= 7
+                      ? "High"
+                      : incomingScore >= 4
+                        ? "Medium"
+                        : "Low";
+
                 return [
                   ...prev,
                   {
-                    asset_id: currentId,
-                    vuln_id: data.vuln_id || currentId, // Fallback for newly discovered missing items
-                    score: 0,
-                    severity: "Medium",
+                    thread_id: currentId,
+                    asset_id: data.asset_id || "Unknown",
+                    vuln_id: data.vuln_id || currentId,
+                    score: incomingScore,
+                    severity: dynamicSeverity,
                     status: updatedStatus,
                     active_step: updatedStep,
                   },
@@ -198,7 +232,10 @@ export default function RemediationCommandCenter() {
             });
 
             // Keep accordion focused on the active task
-            if (data.status === "IN_PROGRESS" || data.type === "ACTION_REQUIRED") {
+            if (
+              data.status === "IN_PROGRESS" ||
+              data.type === "ACTION_REQUIRED"
+            ) {
               setExpandedVulnId(currentId);
             }
           }
@@ -239,30 +276,45 @@ export default function RemediationCommandCenter() {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  // --- ACTIONS ---
-  const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // Triggered when the user selects files via the file dialog
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files.length > 0) {
+      setPendingFiles(Array.from(event.target.files));
+    }
+  };
+
+  // Clears the selected files
+  const handleClearFiles = () => {
+    setPendingFiles([]);
+    // Reset the actual input value so the same file can be selected again if needed
+    const fileInput = document.getElementById("file-upload") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+  };
+
+  // Triggers the actual backend pipeline upload
+  const handleSubmitFiles = async () => {
+    if (pendingFiles.length === 0) return;
 
     setFileUploaded(true);
     setLogs([
       {
         time: new Date().toLocaleTimeString(),
-        text: `[SYSTEM] Initiating upload for ${file.name}...`,
+        text: `[SYSTEM] Initiating upload for ${pendingFiles.length} file(s)...`,
       },
     ]);
     setPipelineStep(0);
 
     const formData = new FormData();
-    formData.append("file", file);
+    pendingFiles.forEach((file) => {
+      formData.append("files", file);
+    });
 
     try {
       await fetch("http://127.0.0.1:8000/api/v1/upload", {
         method: "POST",
         body: formData,
       });
+      setPendingFiles([]); // Clear pending state after successful dispatch
     } catch (error) {
       console.error("Upload failed", error);
       setLogs((prev) => [
@@ -272,6 +324,7 @@ export default function RemediationCommandCenter() {
           text: "[CRITICAL ERROR] Failed to connect to backend upload endpoint.",
         },
       ]);
+      setFileUploaded(false); // Revert UI so they can try again
     }
   };
 
@@ -343,23 +396,62 @@ export default function RemediationCommandCenter() {
                 type="file"
                 id="file-upload"
                 className="hidden"
-                accept=".csv"
-                onChange={handleFileUpload}
+                multiple
+                onChange={handleFileSelect} // Updated to use the new select handler
               />
-              <label
-                htmlFor="file-upload"
-                className="cursor-pointer flex flex-col items-center"
-              >
-                <div className="h-16 w-16 bg-white border border-slate-200 shadow-sm rounded-full flex items-center justify-center mb-4">
-                  <UploadCloud className="h-8 w-8 text-indigo-600" />
+              
+              {pendingFiles.length === 0 ? (
+                /* --- DEFAULT DRAG & DROP STATE --- */
+                <label
+                  htmlFor="file-upload"
+                  className="cursor-pointer flex flex-col items-center py-6"
+                >
+                  <div className="h-16 w-16 bg-white border border-slate-200 shadow-sm rounded-full flex items-center justify-center mb-4">
+                    <UploadCloud className="h-8 w-8 text-indigo-600" />
+                  </div>
+                  <span className="text-lg font-semibold text-slate-700">
+                    Drag & Drop Scan Results
+                  </span>
+                  <span className="text-sm text-slate-500 mt-1">
+                    Supports Trivy, Nessus, JSON, or XML payloads
+                  </span>
+                </label>
+              ) : (
+                /* --- FILES SELECTED STATE WITH BUTTONS --- */
+                <div className="flex flex-col items-center">
+                  <div className="h-16 w-16 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 className="h-8 w-8 text-indigo-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 mb-3">
+                    {pendingFiles.length} File(s) Ready
+                  </h3>
+                  
+                  {/* File Preview List */}
+                  <div className="flex flex-col gap-2 mb-6 w-full max-w-sm text-left max-h-32 overflow-y-auto">
+                    {pendingFiles.map((file, idx) => (
+                      <div key={idx} className="text-sm text-slate-600 bg-white border border-slate-200 px-3 py-2 rounded-md shadow-sm truncate">
+                        {file.name}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Submit & Clear Buttons */}
+                  <div className="flex gap-4">
+                    <button
+                      onClick={handleClearFiles}
+                      className="px-6 py-2.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-semibold transition-colors"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={handleSubmitFiles}
+                      className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors shadow-sm flex items-center gap-2"
+                    >
+                      Start Pipeline
+                    </button>
+                  </div>
                 </div>
-                <span className="text-lg font-semibold text-slate-700">
-                  Drag & Drop Scan Results
-                </span>
-                <span className="text-sm text-slate-500 mt-1">
-                  Supports Trivy, Nessus, or Custom .csv payloads
-                </span>
-              </label>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-between max-w-4xl mx-auto pt-4 relative">
@@ -430,18 +522,18 @@ export default function RemediationCommandCenter() {
                 ) : (
                   vulnerabilities.map((vuln) => (
                     <div
-                      key={vuln.asset_id} // Used asset_id for mapping key
+                      key={vuln.thread_id} // Used asset_id for mapping key
                       className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md"
                     >
                       {/* ACCORDION HEADER */}
                       <div
                         className={`p-4 cursor-pointer flex flex-col transition-colors
-                          ${expandedVulnId === vuln.asset_id ? "bg-indigo-50/30 border-b border-slate-100" : ""}`}
+                          ${expandedVulnId === vuln.thread_id ? "bg-indigo-50/30 border-b border-slate-100" : ""}`}
                         onClick={() =>
                           setExpandedVulnId(
-                            vuln.asset_id === expandedVulnId
+                            vuln.thread_id === expandedVulnId
                               ? null
-                              : vuln.asset_id,
+                              : vuln.thread_id,
                           )
                         }
                       >
@@ -491,7 +583,7 @@ export default function RemediationCommandCenter() {
                       </div>
 
                       {/* REMEDIATION ACCORDION CONTENT */}
-                      {expandedVulnId === vuln.asset_id && (
+                      {expandedVulnId === vuln.thread_id && (
                         <div className="p-5 bg-white space-y-5">
                           {REMEDIATION_STEPS.map((step, idx) => {
                             const status = getStepStatus(vuln, step.id, idx);
