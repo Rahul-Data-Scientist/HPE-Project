@@ -22,7 +22,20 @@ run_remediation_agent.py
 run_agent_through_api.py
 webhook_test.py
 rough3.py
+rough4.py
+rough4.ipynb
 rough3.ipynb
 github_webhook_payload
 github_webhook_payload2
 streamlit_ui.py
+rough.py
+backend/generated_normalization_func.py
+backend/agents/generated_parser_func.py
+backend/check.py
+backend/normalized_csvs
+backend/parsed_csvs
+backend/Raw Scanner Outputs
+backend/normalized_output
+backend/rejected_records
+.venv
+backend/raw_scanner_outputs
