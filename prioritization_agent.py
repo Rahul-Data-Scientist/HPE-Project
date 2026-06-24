@@ -2,7 +2,7 @@ import os
 import time
 import pandas as pd
 from datetime import datetime
-from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text
+from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text, DateTime
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from db_connection import get_db_session, engine
 
@@ -16,6 +16,8 @@ asset_vulnerabilities_table = Table(
     Column("asset_id", String(255), primary_key=True),
     Column("vuln_id", String(255), primary_key=True),
     Column("fix_available", Integer, nullable=False, default=0),
+    Column("first_seen", DateTime),
+    Column("last_seen", DateTime),
     Column("priority_score", Float),
     Column("priority_level", String(10))
 )
@@ -87,25 +89,35 @@ def run_prioritization_agent(csv_file_path: str):
 
     # 2. Build Database Cache
     print(f"Checking database cache for existing priority scores...")
-    session = get_db_session()
     cache = {}
-    try:
-        query = text('''
-            SELECT asset_id::text as asset_id, vuln_id, fix_available, priority_score, priority_level
-            FROM asset_vulnerabilities
-            WHERE asset_id::text = ANY(:a_ids) AND vuln_id = ANY(:v_ids)
-        ''')
-        rows = session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids}).fetchall()
-        for r in rows:
-            cache[(str(r.asset_id), str(r.vuln_id))] = {
-                "fix_available": r.fix_available,
-                "priority_score": r.priority_score,
-                "priority_level": r.priority_level
-            }
-    except Exception as e:
-        print(f"Error querying cache: {e}")
-    finally:
-        session.close()
+    query = text('''
+        SELECT asset_id::text as asset_id, vuln_id, fix_available, priority_score, priority_level, first_seen, last_seen
+        FROM asset_vulnerabilities
+        WHERE asset_id::text = ANY(:a_ids) AND vuln_id = ANY(:v_ids)
+    ''')
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        session = get_db_session()
+        try:
+            rows = session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids}).fetchall()
+            for r in rows:
+                cache[(str(r.asset_id), str(r.vuln_id))] = {
+                    "fix_available": r.fix_available,
+                    "priority_score": r.priority_score,
+                    "priority_level": r.priority_level,
+                    "first_seen": r.first_seen,
+                    "last_seen": r.last_seen
+                }
+            break
+        except Exception as e:
+            print(f"Error querying cache on attempt {attempt + 1}/{max_retries}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+            else:
+                print("Max retries reached. Cache query failed.")
+        finally:
+            session.close()
 
     print(f"Loaded {len(cache)} existing records from cache.")
 
@@ -158,7 +170,7 @@ def run_prioritization_agent(csv_file_path: str):
         
         fs_date = parse_date(first_seen_str)
         ls_date = parse_date(last_seen_str)
-
+        
         if fs_date and ls_date:
             age_days = (ls_date - fs_date).days
             if age_days < 0:
@@ -195,6 +207,8 @@ def run_prioritization_agent(csv_file_path: str):
             "asset_id": asset_id,
             "vuln_id": vuln_id,
             "fix_available": int(fix_available),
+            "first_seen": fs_date,
+            "last_seen": ls_date,
             "priority_score": float(priority_score),
             "priority_level": str(priority_level)
         })
@@ -203,27 +217,41 @@ def run_prioritization_agent(csv_file_path: str):
     df.to_csv(csv_file_path, index=False)
     print(f"Saved prioritized data to {csv_file_path}")
 
-    # 6. Batch Update to DB
+    # 6. Batch Upsert to DB
     if records_to_upsert:
         unique_records = list({(r["asset_id"], r["vuln_id"]): r for r in records_to_upsert}.values())
-        print(f"Batch updating {len(unique_records)} prioritized records in DB...")
-        session = get_db_session()
-        try:
-            update_query = text('''
-                UPDATE asset_vulnerabilities
-                SET fix_available = :fix_available,
-                    priority_score = :priority_score,
-                    priority_level = :priority_level
-                WHERE asset_id::text = :asset_id AND vuln_id = :vuln_id
-            ''')
-            session.execute(update_query, unique_records)
-            session.commit()
-            print("Batch update completed successfully.")
-        except Exception as exc:
-            session.rollback()
-            print(f"DB update error: {exc}")
-        finally:
-            session.close()
+        print(f"Batch upserting {len(unique_records)} prioritized records in DB...")
+        
+        stmt = pg_insert(asset_vulnerabilities_table)
+        update_dict = {
+            "fix_available": stmt.excluded.fix_available,
+            "last_seen": stmt.excluded.last_seen,
+            "priority_score": stmt.excluded.priority_score,
+            "priority_level": stmt.excluded.priority_level
+        }
+        upsert_stmt = stmt.on_conflict_do_update(
+            constraint="uq_asset_vuln",
+            set_=update_dict
+        )
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            session = get_db_session()
+            try:
+                session.execute(upsert_stmt, unique_records)
+                session.commit()
+                print("Batch upsert completed successfully.")
+                break
+            except Exception as exc:
+                session.rollback()
+                print(f"DB update error on attempt {attempt + 1}/{max_retries}: {exc}")
+                if attempt < max_retries - 1:
+                    print("Retrying in 2 seconds...")
+                    time.sleep(2)
+                else:
+                    print("Max DB retries reached. Update failed.")
+            finally:
+                session.close()
     else:
         print("No new priority records to update.")
 

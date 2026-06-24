@@ -328,22 +328,29 @@ def run_vuln_intel_agent(csv_file_path: str):
 
     # ------ Fetch Database Fallback ------
     db_intel_fallback = {}
-    try:
+    max_retries = 3
+    for attempt in range(max_retries):
         session = get_db_session()
-        query_result = session.execute(
-            vulnerability_intel_table.select().where(vulnerability_intel_table.c.vuln_id.in_(vuln_ids))
-        ).fetchall()
-        for row in query_result:
-            db_intel_fallback[row.vuln_id] = {
-                "epss_score": row.epss_score,
-                "kev_flag": row.kev_flag,
-                "exploit_exists": row.exploit_exists,
-                "exploit_count": row.exploit_count
-            }
-    except Exception as exc:
-        print(f"Database fallback query error: {exc}")
-    finally:
-        session.close()
+        try:
+            query_result = session.execute(
+                vulnerability_intel_table.select().where(vulnerability_intel_table.c.vuln_id.in_(vuln_ids))
+            ).fetchall()
+            for row in query_result:
+                db_intel_fallback[row.vuln_id] = {
+                    "epss_score": row.epss_score,
+                    "kev_flag": row.kev_flag,
+                    "exploit_exists": row.exploit_exists,
+                    "exploit_count": row.exploit_count
+                }
+            break
+        except Exception as exc:
+            print(f"Error fetching DB fallback on attempt {attempt + 1}/{max_retries}: {exc}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+            else:
+                print("Max DB retries reached for fallback.")
+        finally:
+            session.close()
 
     records_to_upsert = []
     current_time = datetime.utcnow()
@@ -402,25 +409,34 @@ def run_vuln_intel_agent(csv_file_path: str):
     if records_to_upsert:
         unique_records = list({r["vuln_id"]: r for r in records_to_upsert}.values())
         print(f"Batch upserting {len(unique_records)} intel records to DB...")
-        session = get_db_session()
-        try:
-            stmt = pg_insert(vulnerability_intel_table)
-            update_cols = {
-                col.name: stmt.excluded[col.name]
-                for col in vulnerability_intel_table.columns
-                if col.name != "vuln_id"
-            }
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["vuln_id"],
-                set_=update_cols
-            )
-            session.execute(stmt, unique_records)
-            session.commit()
-            print("Batch upsert completed successfully.")
-        except Exception as exc:
-            session.rollback()
-            print(f"DB upsert error: {exc}")
-        finally:
-            session.close()
+        stmt = pg_insert(vulnerability_intel_table)
+        update_cols = {
+            col.name: stmt.excluded[col.name]
+            for col in vulnerability_intel_table.columns
+            if col.name != "vuln_id"
+        }
+        upsert_stmt = stmt.on_conflict_do_update(
+            index_elements=["vuln_id"],
+            set_=update_cols
+        )
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            session = get_db_session()
+            try:
+                session.execute(upsert_stmt, unique_records)
+                session.commit()
+                print("Batch upsert completed successfully.")
+                break
+            except Exception as exc:
+                session.rollback()
+                print(f"DB upsert error on attempt {attempt + 1}/{max_retries}: {exc}")
+                if attempt < max_retries - 1:
+                    print("Retrying in 2 seconds...")
+                    time.sleep(2)
+                else:
+                    print("Max DB retries reached. Upsert failed.")
+            finally:
+                session.close()
     else:
         print("No records to upsert.")

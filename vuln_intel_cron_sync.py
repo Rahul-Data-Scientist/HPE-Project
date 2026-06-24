@@ -135,13 +135,23 @@ def run_cron_sync():
         
         for i in range(0, total, batch_size):
             batch = records[i:i+batch_size]
-            db_session.execute(upsert_stmt, batch)
-            db_session.commit()
-            print(f"  Upserted batch {(i//batch_size) + 1}/{(total + batch_size - 1)//batch_size}")
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    db_session.execute(upsert_stmt, batch)
+                    db_session.commit()
+                    print(f"  Upserted batch {(i//batch_size) + 1}/{(total + batch_size - 1)//batch_size}")
+                    break
+                except Exception as e:
+                    db_session.rollback()
+                    print(f"  Batch upsert error on attempt {attempt + 1}/{max_retries}: {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
+                    else:
+                        print("  Max retries reached for this batch.")
         print("Successfully synced all vulnerability intelligence to database!")
     except Exception as e:
-        db_session.rollback()
-        print(f"Database error during batch upsert: {e}")
+        print(f"Database setup error during cron sync: {e}")
     finally:
         db_session.close()
 
