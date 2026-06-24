@@ -55,7 +55,7 @@ export default function RemediationCommandCenter() {
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Add this right below your other state declarations (around line 45)
-const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   // Auto-advance to final pipeline step when everything is resolved
   useEffect(() => {
@@ -78,7 +78,25 @@ const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
         if (data.vulnerabilities && data.vulnerabilities.length > 0) {
           setFileUploaded(true);
-          setVulnerabilities(data.vulnerabilities);
+
+          const formattedVulns = data.vulnerabilities.map((v: any) => {
+            const score = v.score || 0;
+            return {
+              ...v,
+              severity:
+                v.severity ||
+                (score >= 9
+                  ? "Critical"
+                  : score >= 7
+                    ? "High"
+                    : score >= 4
+                      ? "Medium"
+                      : "Low"),
+            };
+          });
+
+          // 👇 UPDATE THIS LINE to use formattedVulns instead of data.vulnerabilities
+          setVulnerabilities(formattedVulns);
           // If an active task is found, expand it automatically
           if (data.active_task) {
             setExpandedVulnId(data.active_task.thread_id);
@@ -287,7 +305,9 @@ const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const handleClearFiles = () => {
     setPendingFiles([]);
     // Reset the actual input value so the same file can be selected again if needed
-    const fileInput = document.getElementById("file-upload") as HTMLInputElement;
+    const fileInput = document.getElementById(
+      "file-upload",
+    ) as HTMLInputElement;
     if (fileInput) fileInput.value = "";
   };
 
@@ -399,7 +419,7 @@ const [pendingFiles, setPendingFiles] = useState<File[]>([]);
                 multiple
                 onChange={handleFileSelect} // Updated to use the new select handler
               />
-              
+
               {pendingFiles.length === 0 ? (
                 /* --- DEFAULT DRAG & DROP STATE --- */
                 <label
@@ -425,11 +445,14 @@ const [pendingFiles, setPendingFiles] = useState<File[]>([]);
                   <h3 className="text-lg font-semibold text-slate-800 mb-3">
                     {pendingFiles.length} File(s) Ready
                   </h3>
-                  
+
                   {/* File Preview List */}
                   <div className="flex flex-col gap-2 mb-6 w-full max-w-sm text-left max-h-32 overflow-y-auto">
                     {pendingFiles.map((file, idx) => (
-                      <div key={idx} className="text-sm text-slate-600 bg-white border border-slate-200 px-3 py-2 rounded-md shadow-sm truncate">
+                      <div
+                        key={idx}
+                        className="text-sm text-slate-600 bg-white border border-slate-200 px-3 py-2 rounded-md shadow-sm truncate"
+                      >
                         {file.name}
                       </div>
                     ))}
@@ -541,6 +564,9 @@ const [pendingFiles, setPendingFiles] = useState<File[]>([]);
                           <div className="flex items-center gap-3">
                             {vuln.status === "RESOLVED" ? (
                               <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : vuln.status ===
+                              "FAILED" /* 👇 ADD THIS CHECK */ ? (
+                              <ShieldAlert className="h-5 w-5 text-red-500" />
                             ) : vuln.status === "IN_PROGRESS" ||
                               vuln.status === "WAITING_FOR_APPROVAL" ? (
                               <Loader2 className="h-5 w-5 text-indigo-600 animate-spin" />
@@ -558,11 +584,13 @@ const [pendingFiles, setPendingFiles] = useState<File[]>([]);
                             ${
                               vuln.status === "RESOLVED"
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : vuln.status === "WAITING_FOR_APPROVAL"
-                                  ? "bg-amber-50 text-amber-700 border-amber-200"
-                                  : vuln.status === "IN_PROGRESS"
-                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                    : "bg-slate-50 text-slate-600 border-slate-200"
+                                : vuln.status === "FAILED"
+                                  ? "bg-red-50 text-red-700 border-red-200" /* 👇 ADD THIS RED STYLE */
+                                  : vuln.status === "WAITING_FOR_APPROVAL"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : vuln.status === "IN_PROGRESS"
+                                      ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                      : "bg-slate-50 text-slate-600 border-slate-200"
                             }`}
                           >
                             {vuln.status.replace(/_/g, " ")}

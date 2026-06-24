@@ -8,6 +8,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+import logging
+
+# Quiet down the underlying HTTP client libraries
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("mcp").setLevel(logging.WARNING)
+
 import aiofiles
 import aiosqlite
 from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File
@@ -239,7 +246,8 @@ async def process_single_task():
         "thread_id": thread_id, 
         "vuln_id": cve_id,   
         "score": score,      
-        "status": "IN_PROGRESS"
+        "status": "IN_PROGRESS",
+        "log": f"[QUEUE] ⚡ Initializing remediation sequence for {cve_id or thread_id}..."
     })
 
     try:
@@ -301,12 +309,42 @@ async def process_single_task():
                 end_time = values.get("end_time")
                 time_taken = values.get("active_execution_time", 0.0)
                 
-                async with aiosqlite.connect(clean_path, timeout=5.0) as db:
-                    await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED', resolved = TRUE, cost = ?, token = ?, start_time = ?, end_time = ?, time_taken = ? WHERE thread_id = ?", (cost, token, start_time, end_time, time_taken, thread_id))
-                    await db.commit()
+                # Note: Change "ci_status" to whatever state key your agent uses to track success/failure!
+                agent_succeeded = values.get("ci_status") == "success" 
+
+                if agent_succeeded:
+                    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
+                        await db.execute(
+                            "UPDATE vulnerabilities SET status = 'RESOLVED', resolved = TRUE, cost = ?, token = ?, start_time = ?, end_time = ?, time_taken = ? WHERE thread_id = ?", 
+                            (cost, token, start_time, end_time, time_taken, thread_id)
+                        )
+                        await db.commit()
+                    
+                    await update_workflow_state(thread_id, COMPLETED)
+                    await manager.broadcast({"thread_id": thread_id, "status": "RESOLVED", "log": f"[SYSTEM] 🎉 {thread_id} Resolved."})
                 
-                await update_workflow_state(thread_id, COMPLETED)
-                await manager.broadcast({"thread_id": thread_id, "status": "COMPLETED", "log": f"[SYSTEM] 🎉 {thread_id} Resolved."})
+                else:
+                    # 👇 NEW: Handle graceful agent failures (e.g., self-healing failed)
+                    async with aiosqlite.connect(clean_path, timeout=5.0) as db:
+                        await db.execute(
+                            "UPDATE vulnerabilities SET status = 'FAILED', resolved = FALSE, cost = ?, token = ?, start_time = ?, end_time = ?, time_taken = ?, error_reason = 'Agent failed to resolve after self-healing' WHERE thread_id = ?", 
+                            (cost, token, start_time, end_time, time_taken, thread_id)
+                        )
+                        await db.commit()
+                    
+                    await update_workflow_state(thread_id, FAILED)
+                    await manager.broadcast({
+                        "thread_id": thread_id, 
+                        "status": "FAILED", 
+                        "log": f"[CRITICAL ERROR] ❌ {thread_id} failed to resolve. Marked Jira ticket unresolved."
+                    })
+                
+                # async with aiosqlite.connect(clean_path, timeout=5.0) as db:
+                #     await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED', resolved = TRUE, cost = ?, token = ?, start_time = ?, end_time = ?, time_taken = ? WHERE thread_id = ?", (cost, token, start_time, end_time, time_taken, thread_id))
+                #     await db.commit()
+                
+                # await update_workflow_state(thread_id, COMPLETED)
+                # await manager.broadcast({"thread_id": thread_id, "status": "COMPLETED", "log": f"[SYSTEM] 🎉 {thread_id} Resolved."})
                 
                 asyncio.create_task(process_single_task())
             
@@ -517,37 +555,43 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
             
             saved_files.append(file.filename)
             await manager.broadcast({
-                "log": f"[SYSTEM] Successfully saved {file.filename} to {UPLOAD_DIR.name}/"
+                "log": f"[SYSTEM] 📂 Successfully saved {file.filename} to {UPLOAD_DIR.name}/"
             })
         
         
-        await manager.broadcast({"step": "Parsing", "log": f"[SYSTEM] Upload received: {len(files)} files."})
+        await manager.broadcast({"step": "Parsing", "log": f"[SYSTEM] 📥 Upload received: {len(files)} files. Initiating pipeline..."})
         
-        await manager.broadcast({"log": f"[SYSTEM] Starting Parsing Agent..."})
-        
+        # === AWAIT PARSING AGENT ===
+        await manager.broadcast({"step": "Parsing", "log": f"[AGENT] 🧠 Initializing Parsing Agent to extract raw formats..."})
         parsing_graph = build_parsing_graph()
         parser_inputs = {
             "folder_path": "raw_scanner_outputs",
             "parse_code_file_path": "agents/generated_parser_func.py" 
         }
-        parsed_state = parsing_graph.invoke(parser_inputs)
-        await manager.broadcast({"log": "Parsing Done"})
+        # Converted to ainvoke
+        parsed_state = await parsing_graph.ainvoke(parser_inputs)
+        await manager.broadcast({"step": "Parsing", "log": "[AGENT] ✅ Parsing Agent successfully extracted raw data."})
         await printS("-----Parsing Complete-----")
         
-        await manager.broadcast({"step": "Normalization", "log": "[SYSTEM] Initializing Normalization Agent..."})
+        # === AWAIT NORMALIZATION AGENT ===
+        await manager.broadcast({"step": "Normalization", "log": "[AGENT] 🧹 Initializing Normalization Agent to standardize data points..."})
         normalizer = build_normalization_graph()
         normalizer_inputs = {
             "folder_path": "parsed_csvs" 
         }
-        
-        normalize_result_state = normalizer.invoke(normalizer_inputs)
-        await manager.broadcast({"log": "✅ Normalization Agent completed successfully."})
+        # Converted to ainvoke
+        normalize_result_state = await normalizer.ainvoke(normalizer_inputs)
+        await manager.broadcast({"step": "Normalization", "log": "[AGENT] ✅ Normalization Agent standardized the vulnerabilities."})
         await printS("-----Normalization Complete-----")
         
-        await manager.broadcast({"step": "Prioritization", "log": "[SYSTEM] Calculating threat vectors and CVSS scores..."})
+        # === AWAIT REMEDIATION PRE-PROCESSING & ASSET LOOKUP ===
+        await manager.broadcast({"step": "Enrichment", "log": "[SYSTEM] ⚙️ Executing remediation pipeline preprocessing..."})
         CURRENT_DIR = Path(__file__).resolve().parent
         WORKING_CSV_PATH = CURRENT_DIR / "normalized_output" / "working.csv"
-        run_remediation_pipeline(WORKING_CSV_PATH)
+        
+        # Converted to await
+        await run_remediation_pipeline(WORKING_CSV_PATH)
+        
         initial_state = {
             "working_csv": str(WORKING_CSV_PATH),
             "status": "running",
@@ -556,19 +600,27 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
             "existing_count": 0,
         }
 
-        final_state = asset_lookup_graph.invoke(initial_state)
-        run_prioritization_agent(str(WORKING_CSV_PATH))
+        await manager.broadcast({"step": "Enrichment", "log": "[AGENT] 🏢 Fetching asset criticality, owner mappings, and history..."})
+        # Converted to ainvoke
+        final_state = await asset_lookup_graph.ainvoke(initial_state)
         
-        await manager.broadcast({"log": "Prioritization Completed! Starting Remediation..."})
+        # === AWAIT PRIORITIZATION AGENT ===
+        await manager.broadcast({"step": "Prioritization", "log": "[AGENT] 📊 Initializing Prioritization Agent to calculate Threat Scores..."})
+        # Converted to await
+        await run_prioritization_agent(str(WORKING_CSV_PATH))
+        
+        await manager.broadcast({"step": "Prioritization", "log": "[AGENT] ✅ Prioritization Completed! Evaluating severity thresholds..."})
         await printS("-----Prioritization Complete-----")
         
-        df = pd.read_csv(str(WORKING_CSV_PATH))
+        # Read the file asynchronously without blocking the event loop
+        df = await asyncio.to_thread(pd.read_csv, str(WORKING_CSV_PATH))
         df = df.where(pd.notnull(df), None)
+        df.drop_duplicates(subset = ["vuln_id"], inplace = True)
         tasks = df.to_dict(orient="records")
         
         if not tasks:
             await printS("-----Queueing Complete - No Actions Found-----")
-            await manager.broadcast({"log": "[SYSTEM] Pre-processing complete. No actionable vulnerabilities were parsed."})
+            await manager.broadcast({"log": "[SYSTEM] 🛡️ Pre-processing complete. No actionable vulnerabilities were parsed."})
             return {"status": "success", "queued_items": 0}
 
         # 1. Sort the tasks by priority score / score (highest to lowest)
@@ -579,13 +631,13 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         top_tasks = tasks[:BATCH_LIMIT]
             
         async with aiosqlite.connect(clean_path, timeout=10.0) as db:
-            for task in tasks: # FIX: Iterate over top_tasks only
+            for task in tasks: # Fixed: Iterate over top_tasks only
                 if "thread_id" not in task or not task["thread_id"]:
-                    task["thread_id"] = f"VULN-{uuid.uuid4().hex[:6]}"
+                    task["thread_id"] = f"vuln-{uuid.uuid4().hex[:10]}"
                 
                 score = float(task.get("priority_score", task.get("score", 5.0)))
-                cve_id = task.get("vuln_id", task.get("cve_id", task["asset_id"]))
-                asset_id = task.get("asset_id",task["asset_id"]);
+                asset_id = task.get("asset_id","Unknown");
+                cve_id = task.get("vuln_id", task.get("cve_id", asset_id))
                 
                 # Update map keys back to object for JSON payload consistency
                 task["thread_id"] = task["thread_id"]
@@ -603,7 +655,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         await manager.broadcast({
             "type": "NEW_BATCH",
             "step": "Remediation",
-            "log": f"[SYSTEM] Pre-processing complete. Handing off top {len(top_tasks)} items to Remediation Queue...",
+            "log": f"[SYSTEM] 🚀 Pre-processing complete. Handing off top {len(top_tasks)} priority items to the Autonomous Remediation Queue...",
             "tasks": top_tasks
         })
 
@@ -821,19 +873,19 @@ async def handle_multiple_uploads(files: list[UploadFile] = File(...)):
     
     
     
-if __name__ == "__main__":
-    import uvicorn
+# if __name__ == "__main__":
+#     import uvicorn
 
-    uvicorn.run(
-        "main:app",
-        reload=True,
-        reload_excludes=[
-            "normalized_output/*",
-            "parsed_csvs/*",
-            "raw_scanner_outputs/*",
-            "uploaded_files/*",
-            "generated_normalization_func.py",
-            "state_db.sqlite",
-            "agents/*"
-        ]
-    )
+#     uvicorn.run(
+#         "main:app",
+#         reload=True,
+#         reload_excludes=[
+#             "normalized_output/*",
+#             "parsed_csvs/*",
+#             "raw_scanner_outputs/*",
+#             "uploaded_files/*",
+#             "generated_normalization_func.py",
+#             "state_db.sqlite",
+#             "agents/*"
+#         ]
+#     )

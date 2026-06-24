@@ -1,6 +1,6 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 # %% [markdown]
-# # Agent 2 — Asset Criticality Agent
+# # Agent 2 — Asset Criticality Agent (Asynchronous Variant)
 # 
 # **Receives:** `working.csv` from Agent 1 (already has `asset_id` for all rows, and pre-filled criticality columns for assets that existed in DB).
 # 
@@ -15,7 +15,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 # %%
 # ── Imports ───────────────────────────────────────────────────────────────
-import os, json, logging, ipaddress, time
+import os, json, logging, ipaddress, time, asyncio
 from datetime import datetime, timezone
 from typing import TypedDict, Optional
 import re
@@ -26,8 +26,6 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 from langgraph.graph import StateGraph, END
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("asset_criticality")
@@ -36,7 +34,6 @@ log = logging.getLogger("asset_criticality")
 CURRENT_FILE = Path(__file__).resolve()
 BACKEND_DIR = CURRENT_FILE.parent.parent 
 WORKING_CSV_PATH = BACKEND_DIR / "normalized_output" / "working.csv"
-
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
@@ -341,6 +338,7 @@ ROLE_HOSTNAME_HINTS = {
     "MESSAGE_BUS": ["kafka", "rabbit", "mq", "broker", "queue",
                     "pubsub", "streaming", "event"],
 }
+
 
 # Port-role priority for port-based lookup (first match wins)
 _PORT_ROLE_PRIORITY = ["DATABASE", "AUTH", "WEB", "MANAGEMENT", "MAIL", "MESSAGE_BUS"]
@@ -725,7 +723,7 @@ print("✓ Inference functions ready")
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# SECTION 3 — LLM FALLBACK
+# SECTION 3 — LLM FALLBACK (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -744,21 +742,8 @@ _VALID_ROLES = [
 _VALID_ENVS = ["PROD", "NON_PROD", "UNKNOWN"]
 
 
-_UNRESOLVABLE_EXPOSURE = EXPOSURE_SCORES["UNKNOWN"]   # 0.5, no-signal sentinel
-
-
 def requires_llm(result: dict) -> bool:
-    """
-    Fire LLM only when the deterministic pipeline produced zero signal on
-    ALL of the inferrable fields. Specifically:
-      - role        == UNKNOWN
-      - environment == UNKNOWN
-      - exposure    == 0.5  (UNKNOWN sentinel — no IP, no hostname hints)
-      - cloud_type  == NONE (not a cloud asset, so no cloud-derived env/role)
-
-    If even ONE field resolved, the asset has enough signal — no LLM needed.
-    cloud_type NONE is expected for on-prem; it is NOT a trigger by itself.
-    """
+    _UNRESOLVABLE_EXPOSURE = EXPOSURE_SCORES["UNKNOWN"]   # 0.5, no-signal sentinel
     return (
         result["inferred_role"]  == "UNKNOWN"
         and result["environment"] == "UNKNOWN"
@@ -767,13 +752,9 @@ def requires_llm(result: dict) -> bool:
     )
 
 
-def llm_fill_unknowns(row: dict, result: dict) -> dict:
+async def llm_fill_unknowns_async(row: dict, result: dict) -> dict:
     """
-    Ask the LLM only for fields that are genuinely unresolvable:
-      • inferred_role   — if UNKNOWN
-      • environment     — if UNKNOWN
-    Never ask for exposure_score or cloud_type — those are deterministic.
-    Adds instance_id to context.
+    Asynchronous request to the LLM for fields that are genuinely unresolvable.
     """
     need_role = (result["inferred_role"] == "UNKNOWN")
     need_env  = (result["environment"]   == "UNKNOWN")
@@ -787,10 +768,10 @@ def llm_fill_unknowns(row: dict, result: dict) -> dict:
     if need_env:
         ask_fields.append(f"environment (choose one of: {', '.join(_VALID_ENVS)})")
 
-    # Build context — include instance_id alongside the other identifiers
+    # Build context
     context = (
         f"hostname:    {row.get('hostname',    'unknown')}\n"
-        f"instance_id: {row.get('instance_id', 'unknown')}\n"   # ← added
+        f"instance_id: {row.get('instance_id', 'unknown')}\n"
         f"ip:          {row.get('ip',          'unknown')}\n"
         f"component:   {row.get('component',   'unknown')}\n"
         f"port:        {row.get('port',        'unknown')}\n"
@@ -798,7 +779,6 @@ def llm_fill_unknowns(row: dict, result: dict) -> dict:
         f"description: {str(row.get('description', ''))[:300]}"
     )
 
-    # Tell the LLM exactly which fields are still open and why
     unresolved_note = (
         "NOTE: deterministic inference found no signal for the fields below. "
         "Only infer what the asset context genuinely supports. "
@@ -816,7 +796,9 @@ def llm_fill_unknowns(row: dict, result: dict) -> dict:
     )
 
     try:
-        raw = gemini_client.invoke(prompt).content
+        # ASYNC UPGRADE: Using ainvoke instead of invoke
+        response = await gemini_client.ainvoke(prompt)
+        raw = response.content
 
         if not raw or not raw.strip():
             log.warning("    LLM returned empty response — keeping UNKNOWN")
@@ -838,7 +820,7 @@ def llm_fill_unknowns(row: dict, result: dict) -> dict:
             log.info("    LLM filled: role=%s  env=%s",
                      result["inferred_role"], result["environment"])
 
-    except TimeoutError as e:
+    except asyncio.TimeoutError as e:
         log.warning("    LLM request timed out (%s) — keeping UNKNOWN", e)
     except (ConnectionError, OSError) as e:
         log.warning("    LLM network failure (%s) — keeping UNKNOWN", e)
@@ -866,19 +848,12 @@ print("✓ LLM fallback ready")
 # SECTION 4 — DB helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── Retry helper Function ──────────────────────────────────────────────────────────
 _RETRY_ATTEMPTS = 3
 _RETRY_DELAY    = 5  # seconds
-
 _TRANSIENT_ERRORS = (psycopg2.OperationalError, ConnectionError, TimeoutError)
 
 
 def retry(fn, *args, **kwargs):
-    """
-    Call fn(*args, **kwargs) up to _RETRY_ATTEMPTS times.
-    Retries only on transient infrastructure errors.
-    Raises on the last failure.
-    """
     last_exc = None
     for attempt in range(1, _RETRY_ATTEMPTS + 1):
         try:
@@ -907,11 +882,9 @@ def _connect():
 
 
 def get_conn():
-    """Open a DB connection with retry on transient failures."""
     return retry(_connect)
 
 
-# Batch upsert computed asset context back to DB
 def batch_upsert_asset_context(conn, rows: list[dict]) -> None:
     if not rows:
         return
@@ -947,7 +920,7 @@ print("✓ DB helpers ready")
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# SECTION 5 — LANGGRAPH STATE + NODES
+# SECTION 5 — LANGGRAPH STATE + NODES (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
 class CriticalityState(TypedDict):
@@ -964,19 +937,17 @@ _cache: dict = {}  # in-process cache shared across nodes
 
 # ── Node 1: load_csv ──────────────────────────────────────────────────────
 
-def load_csv(state: CriticalityState) -> CriticalityState:
+async def load_csv(state: CriticalityState) -> CriticalityState:
     _cache.clear()
     log.info("[load_csv] Reading %s", state["working_csv"])
     try:
-        df = pd.read_csv(state["working_csv"])
+        # Offloading blocking file I/O read operation to pool executor
+        df = await asyncio.to_thread(pd.read_csv, state["working_csv"])
         df.columns = [c.strip().lower() for c in df.columns]
         
-        # Reference cleanup
         if "references" in df.columns:
             log.info("[reference_filter] Cleaning references...")
-            df["references"] = df["references"].apply(
-                filter_important_references
-            )
+            df["references"] = df["references"].apply(filter_important_references)
         
         log.info("  → %d rows, columns: %s", len(df), list(df.columns))
         _cache["df"] = df
@@ -985,65 +956,37 @@ def load_csv(state: CriticalityState) -> CriticalityState:
         return {**state, "status": "error", "error": str(e)}
 
 
-# Function to clean references to keep only important references
 IMPORTANT_PATTERNS = [
-    r"access\.redhat\.com",
-    r"nvd\.nist\.gov",
-    r"usn\.ubuntu\.com",
-    r"debian\.org",
-    r"security-tracker\.debian\.org",
-    r"security\.gentoo\.org",
-    r"msrc\.microsoft\.com",
-    r"security\.netapp\.com",
-    r"support\.f5\.com",
-    r"oracle\.com",
-    r"cert-portal\.siemens\.com",
-    r"rustsec\.org",
-    r"snyk\.io",
-    r"hackerone\.com",
-
-    # Github
-    r"github\.com/.*/commit/",
-    r"github\.com/.*/releases/",
-    r"github\.com/.*/security/advisories/",
-    r"GHSA-"
+    r"access\.redhat\.com", r"nvd\.nist\.gov", r"usn\.ubuntu\.com", r"debian\.org",
+    r"security-tracker\.debian\.org", r"security\.gentoo\.org", r"msrc\.microsoft\.com",
+    r"security\.netapp\.com", r"support\.f5\.com", r"oracle\.com", r"cert-portal\.siemens\.com",
+    r"rustsec\.org", r"snyk\.io", r"hackerone\.com", r"github\.com/.*/commit/",
+    r"github\.com/.*/releases/", r"github\.com/.*/security/advisories/", r"GHSA-"
 ]
 
 
 def filter_important_references(reference_string):
     if pd.isna(reference_string):
         return reference_string
-
     reference_string = str(reference_string)
-
-    # Extract URLs
     urls = re.findall(r'https?://[^\s,\]\["\']+', reference_string)
-
     important_urls = []
-
     for url in urls:
-        if any(
-            re.search(pattern, url, re.IGNORECASE)
-            for pattern in IMPORTANT_PATTERNS
-        ):
+        if any(re.search(pattern, url, re.IGNORECASE) for pattern in IMPORTANT_PATTERNS):
             important_urls.append(url)
-
-    # Remove duplicates preserving order
     important_urls = list(dict.fromkeys(important_urls))
-
     return ";".join(important_urls)
 
 
 # ── Node 2: compute_criticality_for_new ──────────────────────────────────
-_llm_semaphore = threading.Semaphore(1)   # one LLM call at a time
-_llm_lock      = threading.Lock()          # protects llm_call_count increment
-def compute_criticality_for_new(state: CriticalityState) -> CriticalityState:
+_llm_semaphore = asyncio.Semaphore(1)  # Async-native lock replacing threading.Semaphore
+
+async def compute_criticality_for_new(state: CriticalityState) -> CriticalityState:
     if state["status"] == "error":
         return state
 
     df = _cache["df"]
 
-    # Ensure all output columns exist (add timestamp cols too)
     for col in ["inferred_role", "exposure_score", "environment",
                 "cloud_type", "dependency_level", "dependency_score",
                 "asset_criticality_score", "first_seen", "last_seen"]:
@@ -1072,18 +1015,18 @@ def compute_criticality_for_new(state: CriticalityState) -> CriticalityState:
     results: dict = {}
     now = datetime.now(timezone.utc).isoformat()
 
-    def _process(row_dict, asset_id):
+    async def _process_async(row_dict, asset_id):
+        nonlocal llm_call_count
+        # Deterministic checks run fast synchronous inside the async loop task
         result = run_criticality_pipeline(row_dict)
-        used_llm = False
         if requires_llm(result):
             log.info("  [LLM] asset_id=%s  role=%s  env=%s — invoking LLM",
                      asset_id, result["inferred_role"], result["environment"])
-            with _llm_semaphore:
-                time.sleep(0.5)
-                result = llm_fill_unknowns(row_dict, result)
-            used_llm = True
+            async with _llm_semaphore:
+                await asyncio.sleep(0.5)
+                result = await llm_fill_unknowns_async(row_dict, result)
+            llm_call_count += 1
 
-        # ── PATCH: stamp timestamps into the result dict ──────────────
         existing_first_seen = row_dict.get("first_seen")
         result["first_seen"] = (
             existing_first_seen
@@ -1091,41 +1034,33 @@ def compute_criticality_for_new(state: CriticalityState) -> CriticalityState:
             else now
         )
         result["last_seen"] = now
-        # ─────────────────────────────────────────────────────────────
+        return asset_id, result
 
-        return result, used_llm
-
-    work_items = []
+    tasks = []
     for _, row in needs_work.iterrows():
         asset_id = row.get("asset_id")
         if not asset_id or str(asset_id).strip() in ("", "nan", "none"):
             log.warning("  Skipping row with no asset_id: hostname=%s", row.get("hostname"))
             continue
-        work_items.append((row.to_dict(), str(asset_id)))
+        tasks.append(_process_async(row.to_dict(), str(asset_id)))
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {
-            executor.submit(_process, row_dict, asset_id): asset_id
-            for row_dict, asset_id in work_items
-        }
-        for future in as_completed(futures):
-            asset_id = futures[future]
-            try:
-                result, used_llm = future.result()
-                results[asset_id] = result
-                if used_llm:
-                    with _llm_lock:
-                        llm_call_count += 1
-                log.info("  ✓ %s → role=%s env=%s crit=%.3f",
-                         asset_id, result["inferred_role"], result["environment"],
-                         result["asset_criticality_score"])
-            except Exception as e:
-                log.error("  ✗ asset_id=%s failed: %s — skipping", asset_id, e)
+    # Process all assets concurrently using async tasks
+    if tasks:
+        task_results = await asyncio.gather(*tasks, return_exceptions=True)
+        for res in task_results:
+            if isinstance(res, Exception):
+                log.error("  ✗ Processing tasks experienced a batch failure context: %s", res)
+                continue
+            asset_id, result = res
+            results[asset_id] = result
+            log.info("  ✓ %s → role=%s env=%s crit=%.3f",
+                     asset_id, result["inferred_role"], result["environment"],
+                     result["asset_criticality_score"])
 
     output_cols = [
         "inferred_role", "exposure_score", "environment",
         "cloud_type", "dependency_level", "dependency_score",
-        "asset_criticality_score", "first_seen", "last_seen",  # ← PATCH: added
+        "asset_criticality_score", "first_seen", "last_seen",
     ]
     for i, row in df.iterrows():
         aid = str(row.get("asset_id", "") or "").strip()
@@ -1137,11 +1072,10 @@ def compute_criticality_for_new(state: CriticalityState) -> CriticalityState:
     _cache["results"] = results
     return {**state, "processed": len(results), "skipped": already_done, "llm_calls": llm_call_count}
 
-# ── Node 3: upsert_to_db ──────────────────────────────────────────────────
-# DB is the source of truth — upsert succeeds BEFORE CSV is written.
-# Retry 3 times with 5s delay. On failure: rollback, stop agent, raise error.
 
-def upsert_to_db(state: CriticalityState) -> CriticalityState:
+# ── Node 3: upsert_to_db ──────────────────────────────────────────────────
+
+async def upsert_to_db(state: CriticalityState) -> CriticalityState:
     if state["status"] == "error":
         return state
 
@@ -1153,7 +1087,6 @@ def upsert_to_db(state: CriticalityState) -> CriticalityState:
     seen_ids    = set()
 
     def _clean_ts(val) -> Optional[str]:
-        """Return val if it looks like a real timestamp string, else None."""
         if val is None:
             return None
         s = str(val).strip()
@@ -1163,23 +1096,12 @@ def upsert_to_db(state: CriticalityState) -> CriticalityState:
 
     for _, row in df.drop_duplicates(subset=["asset_id"]).iterrows():
         aid = str(row.get("asset_id", "") or "").strip()
-        if not aid or aid in ("nan", "none", ""):
-            continue
-        if aid in seen_ids:
+        if not aid or aid in ("nan", "none", "") or aid in seen_ids:
             continue
         seen_ids.add(aid)
 
-        # For newly computed assets, pull timestamps from results{}.
-        # For skipped (existing) assets, results{} has no entry —
-        # first_seen comes from the CSV (already in DB), last_seen = now.
         res = results.get(aid, {})
-
-        first_seen = _clean_ts(res.get("first_seen")) \
-                     or _clean_ts(row.get("first_seen"))
-        # first_seen may still be None for brand-new assets that had no
-        # prior CSV value — SQL COALESCE will write `now` on insert and
-        # keep the existing value on conflict.
-
+        first_seen = _clean_ts(res.get("first_seen")) or _clean_ts(row.get("first_seen"))
         last_seen = _clean_ts(res.get("last_seen")) or now
 
         upsert_rows.append({
@@ -1191,37 +1113,36 @@ def upsert_to_db(state: CriticalityState) -> CriticalityState:
             "dependency_level":        row.get("dependency_level"),
             "dependency_score":        row.get("dependency_score"),
             "asset_criticality_score": row.get("asset_criticality_score"),
-            "first_seen":              first_seen,   # None → COALESCE handles it
-            "last_seen":               last_seen,    # always a real timestamp
+            "first_seen":              first_seen,
+            "last_seen":               last_seen,
         })
 
     log.info("[upsert_to_db] Upserting %d asset rows", len(upsert_rows))
-    conn = None
-    try:
-        def _do_upsert():
-            nonlocal conn
+    
+    def _do_upsert():
+        conn = None
+        try:
             conn = get_conn()
             batch_upsert_asset_context(conn, upsert_rows)
-            conn.close()
-            conn = None
-        retry(_do_upsert)
+        finally:
+            if conn is not None:
+                conn.close()
+
+    try:
+        # Offloading blocking psycopg2 network execution transactions out of the main thread loop
+        await asyncio.to_thread(_do_upsert)
         log.info("  → DB upsert complete")
     except Exception as e:
-        if conn is not None:
-            try: conn.rollback()
-            except Exception: pass
-            try: conn.close()
-            except Exception: pass
         log.error("[upsert_to_db] Failed after retries: %s", e)
         return {**state, "status": "error", "error": str(e)}
 
     _cache["upsert_rows_done"] = True
     return state
 
-# ── Node 4: write_results_to_csv ──────────────────────────────────────────
-# Only runs after upsert_to_db succeeds.
 
-def write_results_to_csv(state: CriticalityState) -> CriticalityState:
+# ── Node 4: write_results_to_csv ──────────────────────────────────────────
+
+async def write_results_to_csv(state: CriticalityState) -> CriticalityState:
     if state["status"] == "error":
         return state
 
@@ -1238,15 +1159,14 @@ def write_results_to_csv(state: CriticalityState) -> CriticalityState:
     for i, row in df.iterrows():
         aid = str(row.get("asset_id", "") or "").strip()
         if aid in results:
-            # Newly computed asset — write all fields including both timestamps
             for col in output_cols:
                 df.at[i, col] = results[aid][col]
         else:
-            # Skipped (existing) asset — only refresh last_seen
             df.at[i, "last_seen"] = now
 
     try:
-        df.to_csv(state["working_csv"], index=False)
+        # Offloading file writing IO tasks safely
+        await asyncio.to_thread(df.to_csv, state["working_csv"], index=False)
         log.info("[write_results_to_csv] Saved %d rows → %s", len(df), state["working_csv"])
         _cache["df"] = df
     except Exception as e:
@@ -1261,8 +1181,6 @@ print("✓ LangGraph nodes defined")
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION 6 — BUILD AND COMPILE THE GRAPH
-# Node order: load_csv → compute_criticality_for_new → upsert_to_db → write_results_to_csv
-# DB is updated before CSV — database is the source of truth.
 # ═══════════════════════════════════════════════════════════════════════════
 
 def route(state: CriticalityState) -> str:
@@ -1286,12 +1204,12 @@ builder.add_conditional_edges(
 builder.add_conditional_edges(
     "compute_criticality_for_new",
     route,
-    {"continue": "upsert_to_db", "error_end": END}   # DB first
+    {"continue": "upsert_to_db", "error_end": END}
 )
 builder.add_conditional_edges(
     "upsert_to_db",
     route,
-    {"continue": "write_results_to_csv", "error_end": END}  # CSV only after DB succeeds
+    {"continue": "write_results_to_csv", "error_end": END}
 )
 builder.add_edge("write_results_to_csv", END)
 
@@ -1299,21 +1217,19 @@ criticality_graph = builder.compile()
 print("✓ Graph compiled")
 
 # ═══════════════════════════════════════════════════════════════════════════
-# STANDALONE RUN
+# STANDALONE ASYNC RUN ROUTINE
 # ═══════════════════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
-
-    initial_state: CriticalityState = {
-        "working_csv": str(WORKING_CSV_PATH),
-        "status": "running",
-        "error": None,
-        "processed": 0,
-        "skipped": 0,
-        "llm_calls": 0,
-    }
-
-    final_state = criticality_graph.invoke(initial_state)
-
-    print("\n=== Asset Criticality Agent — Final State ===")
-    print(json.dumps(final_state, indent=2))
+# if __name__ == "__main__":
+#     initial_state: CriticalityState = {
+#         "working_csv": str(WORKING_CSV_PATH),
+#         "status": "running",
+#         "error": None,
+#         "processed": 0,
+#         "skipped": 0,
+#         "llm_calls": 0,
+#     }
+#     # Execute with ainvoke instead of invoke
+#     final_state = asyncio.run(criticality_graph.ainvoke(initial_state))
+#     print("\n=== Asset Criticality Agent — Final State ===")
+#     print(json.dumps(final_state, indent=2))

@@ -1,10 +1,11 @@
 import os
 import time
+import asyncio
 import pandas as pd
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from .db_connection import get_db_session, engine
+# Importing the updated async session from db_connection
+from .db_connection import get_async_db_session, engine
 
 # =========================
 # TABLE SCHEMA
@@ -49,12 +50,16 @@ def parse_date(date_str) -> datetime:
 # MAIN AGENT FUNCTION
 # =========================
 
-def run_prioritization_agent(csv_file_path: str):
+async def run_prioritization_agent(csv_file_path: str):
     print(f"\n--- Prioritization Agent: {csv_file_path} ---")
-    if not os.path.exists(csv_file_path):
+    
+    # Offload blocking OS checks to thread
+    file_exists = await asyncio.to_thread(os.path.exists, csv_file_path)
+    if not file_exists:
         raise FileNotFoundError(f"CSV not found: {csv_file_path}")
 
-    df = pd.read_csv(csv_file_path)
+    # Offload blocking pandas read to thread
+    df = await asyncio.to_thread(pd.read_csv, csv_file_path)
 
     required_cols = ["vuln_id", "asset_id"]
     for col in required_cols:
@@ -85,9 +90,9 @@ def run_prioritization_agent(csv_file_path: str):
         print("No valid asset-vulnerability pairs found.")
         return
 
-    # 2. Build Database Cache
+    # 2. Build Database Cache (Async)
     print(f"Checking database cache for existing priority scores...")
-    session = get_db_session()
+    session = await get_async_db_session()
     cache = {}
     try:
         query = text('''
@@ -95,7 +100,9 @@ def run_prioritization_agent(csv_file_path: str):
             FROM asset_vulnerabilities
             WHERE asset_id::text = ANY(:a_ids) AND vuln_id = ANY(:v_ids)
         ''')
-        rows = session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids}).fetchall()
+        
+        result = await session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids})
+        rows = result.fetchall()
         for r in rows:
             cache[(str(r.asset_id), str(r.vuln_id))] = {
                 "fix_available": r.fix_available,
@@ -105,7 +112,7 @@ def run_prioritization_agent(csv_file_path: str):
     except Exception as e:
         print(f"Error querying cache: {e}")
     finally:
-        session.close()
+        await session.close()
 
     print(f"Loaded {len(cache)} existing records from cache.")
 
@@ -199,15 +206,16 @@ def run_prioritization_agent(csv_file_path: str):
             "priority_level": str(priority_level)
         })
 
-    # 5. Persist to CSV
-    df.to_csv(csv_file_path, index=False)
+    # 5. Persist to CSV (Offload to thread to prevent blocking)
+    await asyncio.to_thread(df.to_csv, csv_file_path, index=False)
     print(f"Saved prioritized data to {csv_file_path}")
 
-    # 6. Batch Update to DB
+    # 6. Batch Update to DB (Async)
     if records_to_upsert:
         unique_records = list({(r["asset_id"], r["vuln_id"]): r for r in records_to_upsert}.values())
         print(f"Batch updating {len(unique_records)} prioritized records in DB...")
-        session = get_db_session()
+        
+        session = await get_async_db_session()
         try:
             update_query = text('''
                 UPDATE asset_vulnerabilities
@@ -216,17 +224,17 @@ def run_prioritization_agent(csv_file_path: str):
                     priority_level = :priority_level
                 WHERE asset_id::text = :asset_id AND vuln_id = :vuln_id
             ''')
-            session.execute(update_query, unique_records)
-            session.commit()
+            await session.execute(update_query, unique_records)
+            await session.commit()
             print("Batch update completed successfully.")
         except Exception as exc:
-            session.rollback()
+            await session.rollback()
             print(f"DB update error: {exc}")
         finally:
-            session.close()
+            await session.close()
     else:
         print("No new priority records to update.")
 
 # if __name__ == "__main__":
-#     # For standalone testing
-#     run_prioritization_agent("final_working.csv")
+#     # For standalone testing in an async environment:
+#     # asyncio.run(run_prioritization_agent("final_working.csv"))

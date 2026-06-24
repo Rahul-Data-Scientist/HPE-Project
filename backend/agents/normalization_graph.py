@@ -4,6 +4,7 @@ import sys
 import glob
 import time
 import importlib
+import asyncio
 from typing import List, Any
 from pydantic import BaseModel, Field
 import pandas as pd
@@ -30,7 +31,7 @@ class NormalizationState(MessagesState):
 # =====================================================================
 # 2. DISCOVERY & ROUTING NODES
 # =====================================================================
-def get_csv_paths(state: NormalizationState):
+async def get_csv_paths(state: NormalizationState):
     """
     Scans the provided 'folder_path' for parsed CSVs and normalizes paths.
     """
@@ -40,7 +41,7 @@ def get_csv_paths(state: NormalizationState):
     return {"path_list": path_list}
 
 
-def process_next_file(state: NormalizationState):
+async def process_next_file(state: NormalizationState):
     """
     Pops the next file out of the pipeline queue and clears transient variables.
     """
@@ -64,7 +65,7 @@ def process_next_file(state: NormalizationState):
 # =====================================================================
 # 3. TRANSFORMATION COMPONENT NODES
 # =====================================================================
-def inspect_data(state: NormalizationState):
+async def inspect_data(state: NormalizationState):
     """Loads CSV slice and extracts schema metadata profile for the LLM."""
     df = pd.read_csv(state['file_path'])
     
@@ -88,7 +89,7 @@ class FunctionSchema(BaseModel):
 llm = ChatOpenAI(model="gpt-4.1-mini").with_structured_output(FunctionSchema)
 
 
-def generate_code(state: NormalizationState):
+async def generate_code(state: NormalizationState):
     """LLM writes the specialized Python normalization schema function."""
     error_context = ""
     if state.get("error_message"):
@@ -137,18 +138,19 @@ Return ONLY the executable code for the function `normalize_data(df)`. No descri
 
 {error_context}
 """
-    response = llm.invoke([HumanMessage(content=prompt)])
+    # Updated to ainvoke for async execution
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
     code = response.function.replace("```python", "").replace("```", "").strip()
     return {"generated_code": code, "retry_count": state["retry_count"] + 1}
 
 
-def save_generated_code(state: NormalizationState):
+async def save_generated_code(state: NormalizationState):
     with open("generated_normalization_func.py", "w") as f:
         f.write(state["generated_code"])
     return {}
 
 
-def execute_generated_code(state: NormalizationState):
+async def execute_generated_code(state: NormalizationState):
     """
     Executes code dynamically. If successful, creates 'normalized_csvs',
     appends '_normalized' to the original filename, and stores it directly.
@@ -185,7 +187,7 @@ def execute_generated_code(state: NormalizationState):
 # =====================================================================
 # 4. FINAL CONSOLIDATION CONCAT NODE
 # =====================================================================
-def merge_normalized_csvs(state: NormalizationState):
+async def merge_normalized_csvs(state: NormalizationState):
     """
     Executes right before END. Combines all processed files from 
     'normalized_output/' folder into a single unified 'working.csv'.
@@ -211,14 +213,14 @@ def merge_normalized_csvs(state: NormalizationState):
 # =====================================================================
 # 5. CONDITIONS & ROUTING LOGIC
 # =====================================================================
-def route_after_orchestrator(state: NormalizationState):
+async def route_after_orchestrator(state: NormalizationState):
     if not state.get("file_path"):
         print("\n[Orchestrator] Loop processing complete. Transitioning to terminal data merge.")
         return "Merge Matrix"
     return "Process File"
 
 
-def should_retry(state: NormalizationState):
+async def should_retry(state: NormalizationState):
     if state.get("error_message") == "SUCCESS":
         return "Next File / Limit Reached"
     
