@@ -747,9 +747,17 @@ async def get_system_state():
 # ==========================================
 # DASHBOARD REST ENDPOINT (PostgreSQL)
 # ==========================================
-def format_mttr(td: timedelta) -> str:
-    if not td: return "0m 0s"
-    total_seconds = int(td.total_seconds())
+# def format_mttr(td: timedelta) -> str:
+#     if not td: return "0m 0s"
+#     total_seconds = int(td.total_seconds())
+#     minutes, seconds = divmod(total_seconds, 60)
+#     return f"{minutes}m {seconds}s"
+
+def format_mttr(time_taken_seconds: float) -> str:
+    if not time_taken_seconds: 
+        return "0m 0s"
+    
+    total_seconds = int(time_taken_seconds)
     minutes, seconds = divmod(total_seconds, 60)
     return f"{minutes}m {seconds}s"
 
