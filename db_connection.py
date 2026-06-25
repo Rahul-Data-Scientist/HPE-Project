@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv, find_dotenv
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 # Locate and load the environment variables from .env
 load_dotenv(find_dotenv())
@@ -23,19 +22,19 @@ db_host = db_host.strip().strip('"').strip("'")
 db_port = db_port.strip().strip('"').strip("'")
 db_name = db_name.strip().strip('"').strip("'")
 
-# Create connection URL using psycopg2 driver
-connection_url = f"postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+# Create connection URL using asyncpg driver
+connection_url = f"postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
-# Initialize the SQLAlchemy engine
+# Initialize the SQLAlchemy async engine
 # pool_pre_ping checks the connection before executing queries to ensure RDS didn't close idle connections
-engine = create_engine(connection_url, pool_pre_ping=True)
+engine = create_async_engine(connection_url, pool_pre_ping=True)
 
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Create async session factory
+SessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession)
 
-def get_db_session():
+def get_db_session() -> AsyncSession:
     """
-    Creates and returns a new SQLAlchemy session.
-    Ensure to close the session after use.
+    Creates and returns a new SQLAlchemy AsyncSession.
+    Ensure to close the session or use async with.
     """
     return SessionLocal()

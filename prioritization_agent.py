@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 import pandas as pd
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text, DateTime
@@ -51,12 +52,12 @@ def parse_date(date_str) -> datetime:
 # MAIN AGENT FUNCTION
 # =========================
 
-def run_prioritization_agent(csv_file_path: str):
+async def run_prioritization_agent(csv_file_path: str):
     print(f"\n--- Prioritization Agent: {csv_file_path} ---")
     if not os.path.exists(csv_file_path):
         raise FileNotFoundError(f"CSV not found: {csv_file_path}")
 
-    df = pd.read_csv(csv_file_path)
+    df = await asyncio.to_thread(pd.read_csv, csv_file_path)
 
     required_cols = ["vuln_id", "asset_id"]
     for col in required_cols:
@@ -100,7 +101,8 @@ def run_prioritization_agent(csv_file_path: str):
     for attempt in range(max_retries):
         session = get_db_session()
         try:
-            rows = session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids}).fetchall()
+            result = await session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids})
+            rows = result.fetchall()
             for r in rows:
                 cache[(str(r.asset_id), str(r.vuln_id))] = {
                     "fix_available": r.fix_available,
@@ -113,11 +115,11 @@ def run_prioritization_agent(csv_file_path: str):
         except Exception as e:
             print(f"Error querying cache on attempt {attempt + 1}/{max_retries}: {e}")
             if attempt < max_retries - 1:
-                time.sleep(2)
+                await asyncio.sleep(2)
             else:
                 print("Max retries reached. Cache query failed.")
         finally:
-            session.close()
+            await session.close()
 
     print(f"Loaded {len(cache)} existing records from cache.")
 
@@ -214,7 +216,7 @@ def run_prioritization_agent(csv_file_path: str):
         })
 
     # 5. Persist to CSV
-    df.to_csv(csv_file_path, index=False)
+    await asyncio.to_thread(df.to_csv, csv_file_path, index=False)
     print(f"Saved prioritized data to {csv_file_path}")
 
     # 6. Batch Upsert to DB
@@ -230,7 +232,7 @@ def run_prioritization_agent(csv_file_path: str):
             "priority_level": stmt.excluded.priority_level
         }
         upsert_stmt = stmt.on_conflict_do_update(
-            constraint="uq_asset_vuln",
+            constraint="asset_vulnerabilities_pkey",
             set_=update_dict
         )
         
@@ -238,23 +240,23 @@ def run_prioritization_agent(csv_file_path: str):
         for attempt in range(max_retries):
             session = get_db_session()
             try:
-                session.execute(upsert_stmt, unique_records)
-                session.commit()
+                await session.execute(upsert_stmt, unique_records)
+                await session.commit()
                 print("Batch upsert completed successfully.")
                 break
             except Exception as exc:
-                session.rollback()
+                await session.rollback()
                 print(f"DB update error on attempt {attempt + 1}/{max_retries}: {exc}")
                 if attempt < max_retries - 1:
                     print("Retrying in 2 seconds...")
-                    time.sleep(2)
+                    await asyncio.sleep(2)
                 else:
                     print("Max DB retries reached. Update failed.")
             finally:
-                session.close()
+                await session.close()
     else:
         print("No new priority records to update.")
 
 if __name__ == "__main__":
     # For standalone testing
-    run_prioritization_agent("final_working.csv")
+    asyncio.run(run_prioritization_agent("final_working.csv"))

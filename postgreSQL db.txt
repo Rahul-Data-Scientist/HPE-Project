@@ -26,7 +26,7 @@ Table "public.asset_vulnerabilities"
  priority_score   | double precision            |           |          |
  priority_level   | character varying(10)       |           |          |
 Indexes:
-    "uq_asset_vuln" UNIQUE CONSTRAINT, btree (asset_id, vuln_id)
+    "asset_vulnerabilities_pkey" UNIQUE CONSTRAINT, btree (asset_id, vuln_id)
 Foreign-key constraints:
     "asset_vulnerabilities_asset_id_fkey" FOREIGN KEY (asset_id) REFERENCES assets(asset_id) ON DELETE CASCADE
     "asset_vulnerabilities_vuln_id_fkey" FOREIGN KEY (vuln_id) REFERENCES vulnerabilities(vuln_id) ON DELETE CASCADE
