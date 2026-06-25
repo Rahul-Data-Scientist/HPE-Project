@@ -12,8 +12,7 @@ HOW TO USE (for the agent coordinator)
 3. Call this single function with the CSV path:
 
        from main_workflow import run_remediation_pipeline
-       import asyncio
-       final_state = asyncio.run(run_remediation_pipeline(csv_file_path))
+       final_state = run_remediation_pipeline(csv_file_path)
 
 That's it. The workflow will:
   • Enrich each CVE with static details from NVD API v2.0
@@ -43,8 +42,8 @@ import os
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
-from .vulnerability_agent import run_vulnerability_agent
-from .vuln_intel_agent import run_vuln_intel_agent
+from vulnerability_agent import run_vulnerability_agent
+from vuln_intel_agent import run_vuln_intel_agent
 
 
 # =========================
@@ -104,7 +103,7 @@ workflow = graph_builder.compile()
 
 async def run_remediation_pipeline(csv_file_path: str) -> dict:
     """
-    Start the post-normalisation enrichment pipeline asynchronously.
+    Start the post-normalisation enrichment pipeline.
 
     Parameters
     ----------
