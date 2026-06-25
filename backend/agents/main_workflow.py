@@ -12,7 +12,8 @@ HOW TO USE (for the agent coordinator)
 3. Call this single function with the CSV path:
 
        from main_workflow import run_remediation_pipeline
-       final_state = run_remediation_pipeline(csv_file_path)
+       import asyncio
+       final_state = asyncio.run(run_remediation_pipeline(csv_file_path))
 
 That's it. The workflow will:
   • Enrich each CVE with static details from NVD API v2.0
@@ -58,18 +59,18 @@ class WorkflowState(TypedDict):
 # NODES
 # =========================
 
-def vulnerability_agent_node(state: WorkflowState) -> WorkflowState:
+async def vulnerability_agent_node(state: WorkflowState) -> WorkflowState:
     """
     Node 1 — Vulnerability Agent
     Reads csv_file_path, queries NVD API v2.0 for any CVE not fully present
     in the DB, enriches the CSV, and batch upserts to the vulnerabilities table.
     """
     print("\n[LangGraph] -- Node 1: vulnerability_agent_node")
-    run_vulnerability_agent(state["csv_file_path"])
+    await run_vulnerability_agent(state["csv_file_path"])
     return state
 
 
-def vuln_intel_agent_node(state: WorkflowState) -> WorkflowState:
+async def vuln_intel_agent_node(state: WorkflowState) -> WorkflowState:
     """
     Node 2 — Vuln Intel Agent
     Reads csv_file_path (now enriched by Node 1), bulk-downloads EPSS / KEV /
@@ -77,7 +78,7 @@ def vuln_intel_agent_node(state: WorkflowState) -> WorkflowState:
     to the vulnerability_intel table.
     """
     print("\n[LangGraph] -- Node 2: vuln_intel_agent_node")
-    run_vuln_intel_agent(state["csv_file_path"])
+    await run_vuln_intel_agent(state["csv_file_path"])
     return state
 
 
@@ -101,9 +102,9 @@ workflow = graph_builder.compile()
 # PUBLIC ENTRY POINT
 # =========================
 
-def run_remediation_pipeline(csv_file_path: str) -> dict:
+async def run_remediation_pipeline(csv_file_path: str) -> dict:
     """
-    Start the post-normalisation enrichment pipeline.
+    Start the post-normalisation enrichment pipeline asynchronously.
 
     Parameters
     ----------
@@ -129,6 +130,6 @@ def run_remediation_pipeline(csv_file_path: str) -> dict:
         )
 
     print(f"\n[Pipeline] Starting from CSV: {csv_file_path}")
-    final_state = workflow.invoke({"csv_file_path": csv_file_path})
+    final_state = await workflow.ainvoke({"csv_file_path": csv_file_path})
     print(f"\n[Pipeline] Finished. Final state: {final_state}")
     return final_state

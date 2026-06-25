@@ -34,7 +34,7 @@ class GraphState(MessagesState):
 # =====================================================================
 # 2. ORCHESTRATION / ROUTING NODE
 # =====================================================================
-def process_next_file(state: GraphState):
+async def process_next_file(state: GraphState):
     """
     Acts as the entry and traffic router. Pops the next file out of 
     the pipeline queue and clears transient variables for the fresh loop.
@@ -61,13 +61,13 @@ def process_next_file(state: GraphState):
 # =====================================================================
 # 3. COMPONENT NODES
 # =====================================================================
-def get_file_paths(state: GraphState):
+async def get_file_paths(state: GraphState):
     search_pattern = os.path.join(state['folder_path'], "*.json")
     path_list = [os.path.normpath(path) for path in glob.glob(search_pattern)]
     print(f"[Discovery] Found {len(path_list)} file(s) in '{state['folder_path']}'")
     return {"path_list": path_list}
 
-def load_json(state: GraphState):
+async def load_json(state: GraphState):
     with open(state["file_path"], 'rb') as f:
         raw_bytes = f.read()
         result = chardet.detect(raw_bytes)
@@ -78,6 +78,7 @@ def load_json(state: GraphState):
 
 
 def extract_internal_structure(data, path="", depth=0, max_depth=5):
+    """Kept synchronous as it is a CPU-bound recursive helper."""
     if depth > max_depth:
         return "..."
     if isinstance(data, dict):
@@ -94,7 +95,7 @@ def extract_internal_structure(data, path="", depth=0, max_depth=5):
         return f"{type(data).__name__} (e.g., {str(data)[:30]})"
 
 
-def process_scanner_output(state: GraphState):
+async def process_scanner_output(state: GraphState):
     structure_map = extract_internal_structure(state["raw_data"])
     entry_points = []
     if isinstance(state["raw_data"], dict):
@@ -116,7 +117,7 @@ class ParseFunction(BaseModel):
 llm = ChatOpenAI(model="gpt-4.1-mini").with_structured_output(ParseFunction)
 
 
-def generate_parse_code(state: GraphState):
+async def generate_parse_code(state: GraphState):
     error_context = ""
     if state.get("error_message"):
         error_context = f"""
@@ -155,17 +156,18 @@ Provide only the Python function. No conversational filler.
 
 {error_context}
 """
-    result = llm.invoke([HumanMessage(content=message)])
+    # Updated to ainvoke for async compatibility
+    result = await llm.ainvoke([HumanMessage(content=message)])
     return {"function": result.function, "retry_count": state["retry_count"] + 1}
 
 
-def save_parse_code(state: GraphState):
+async def save_parse_code(state: GraphState):
     with open(state["parse_code_file_path"], "w") as f:
         f.write(state["function"])
     return {}
 
 
-def execute_parse_code(state: GraphState):
+async def execute_parse_code(state: GraphState):
     """
     Executes code dynamically. If successful, creates the 'parsed_csvs' 
     directory, immediately dumps the DataFrame to the CSV, and avoids saving it to state.
