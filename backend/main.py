@@ -29,7 +29,7 @@ from agents.parsing_agent import build_parsing_graph
 from agents.normalization_graph import build_normalization_graph
 from agents.main_workflow import run_remediation_pipeline
 from agents.asset_lookup_agent import asset_lookup_graph
-from agents.prioritization_graph import run_prioritization_agent
+from agents.prioritization_agent import run_prioritization_agent
 from agents.remediation_agent import build_graph, initialize_agent_components
 import pandas as pd
 
@@ -149,6 +149,14 @@ class ConnectionManager:
         if "log" in message or "status" in message or "node" in message:
             self.last_log_cache = message
             
+        # 👇 NEW: Update global tracker automatically
+        if "step" in message:
+            global_tracker.current_step = message["step"]
+        if "log" in message:
+            global_tracker.add_log(message["log"])
+        if message.get("type") == "QUEUE_CLEARED":
+            global_tracker.clear()
+            
         dead_connections = []
         for connection in self.active_connections:
             try:
@@ -161,6 +169,25 @@ class ConnectionManager:
             self.disconnect(dead)
 
 manager = ConnectionManager()
+
+# --- GLOBAL SYSTEM TRACKER ---
+class SystemTracker:
+    def __init__(self):
+        self.current_step = "Idle"
+        self.logs = []
+
+    def add_log(self, text: str):
+        time_str = datetime.now().strftime("%I:%M:%S %p")
+        self.logs.append({"time": time_str, "text": text})
+        # Keep terminal clean by only storing the last 100 logs
+        if len(self.logs) > 100:
+            self.logs.pop(0)
+            
+    def clear(self):
+        self.current_step = "Idle"
+        self.logs = []
+
+global_tracker = SystemTracker()
 
 # --- BACKGROUND QUEUE PROCESSOR ---
 NODE_LOG_MAP = {
@@ -630,6 +657,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         BATCH_LIMIT = 10
         top_tasks = tasks[:BATCH_LIMIT]
             
+        await manager.broadcast({"step": "Prioritization", "log": "[AGENT] ✅ Prioritization Completed! Evaluating severity thresholds..."})
         async with aiosqlite.connect(clean_path, timeout=10.0) as db:
             for task in tasks: # Fixed: Iterate over top_tasks only
                 if "thread_id" not in task or not task["thread_id"]:
@@ -670,8 +698,8 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
 async def github_webhook_listener(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     
-    async with aiofiles.open("github_webhook_payload2.json", "a", encoding="utf-8") as f:
-        await f.write(json.dumps(payload, indent=4) + "\n\n")
+    # async with aiofiles.open("github_webhook_payload2.json", "a", encoding="utf-8") as f:
+    #     await f.write(json.dumps(payload, indent=4) + "\n\n")
 
     event_type = request.headers.get("X-GitHub-Event")
     should_continue = False
@@ -736,14 +764,23 @@ async def get_system_state():
         async with db.execute("SELECT thread_id, cve_id, score, status, asset_id FROM vulnerabilities") as cursor:
             all_vulns = await cursor.fetchall()
 
-        vulns = [{"thread_id": v[0], "vuln_id": v[1], "score": v[2], "status": v[3], "asset_id" : v[4]} for v in all_vulns]
+        vulns = [{"thread_id": v[0], "vuln_id": v[1], "score": v[2], "status": v[3], "asset_id": v[4]} for v in all_vulns]
+
+        # Smart Step Recovery: If server rebooted but DB has data, infer the step
+        step = global_tracker.current_step
+        if step == "Idle" and len(vulns) > 0:
+            all_finished = all(v["status"] in ["RESOLVED", "FAILED"] for v in vulns)
+            step = "Resolved" if all_finished else "Remediation"
 
         return {
             "active_task": {"thread_id": active_row[0], "status": active_row[1]} if active_row else None,
             "metrics": {"pending": pending, "finished": finished, "total": total},
-            "vulnerabilities": vulns
+            "vulnerabilities": vulns,
+            "current_step": step,               # <-- Send current step
+            "recent_logs": global_tracker.logs  # <-- Send history of logs
         }
-
+        
+        
 # ==========================================
 # DASHBOARD REST ENDPOINT (PostgreSQL)
 # ==========================================

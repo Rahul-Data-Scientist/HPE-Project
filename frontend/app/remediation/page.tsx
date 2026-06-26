@@ -31,6 +31,7 @@ interface Vulnerability {
 const PIPELINE_STEPS = [
   "Parsing",
   "Normalization",
+  "Enrichment",
   "Prioritization",
   "Remediation",
   "Resolved",
@@ -63,7 +64,7 @@ export default function RemediationCommandCenter() {
       vulnerabilities.length > 0 &&
       vulnerabilities.every((v) => v.status === "RESOLVED")
     ) {
-      setPipelineStep(4);
+      setPipelineStep(5);
     }
   }, [vulnerabilities]);
 
@@ -71,33 +72,36 @@ export default function RemediationCommandCenter() {
   useEffect(() => {
     const syncState = async () => {
       try {
-        const response = await fetch(
-          "http://127.0.0.1:8000/api/v1/system-state",
-        );
+        const response = await fetch("http://127.0.0.1:8000/api/v1/system-state");
         const data = await response.json();
 
+        // 1. Sync Terminal Logs (so incognito tab isn't empty!)
+        if (data.recent_logs && data.recent_logs.length > 0) {
+          setLogs(data.recent_logs);
+        }
+
+        // 2. Sync Pipeline Step precisely
+        if (data.current_step && data.current_step !== "Idle") {
+          setFileUploaded(true);
+          const stepIndex = PIPELINE_STEPS.indexOf(data.current_step);
+          if (stepIndex !== -1) {
+            setPipelineStep(stepIndex);
+          }
+        }
+
+        // 3. Sync Vulnerabilities
         if (data.vulnerabilities && data.vulnerabilities.length > 0) {
           setFileUploaded(true);
-
           const formattedVulns = data.vulnerabilities.map((v: any) => {
             const score = v.score || 0;
             return {
               ...v,
-              severity:
-                v.severity ||
-                (score >= 9
-                  ? "Critical"
-                  : score >= 7
-                    ? "High"
-                    : score >= 4
-                      ? "Medium"
-                      : "Low"),
+              severity: v.severity || (score >= 9 ? "Critical" : score >= 7 ? "High" : score >= 4 ? "Medium" : "Low"),
             };
           });
 
-          // 👇 UPDATE THIS LINE to use formattedVulns instead of data.vulnerabilities
           setVulnerabilities(formattedVulns);
-          // If an active task is found, expand it automatically
+          
           if (data.active_task) {
             setExpandedVulnId(data.active_task.thread_id);
           }
@@ -178,7 +182,7 @@ export default function RemediationCommandCenter() {
               };
             });
             setVulnerabilities(formattedVulns);
-            setPipelineStep(3);
+            // setPipelineStep(3);
           }
 
           // 4. Unified Vulnerability State Updates (tracked by asset_id)

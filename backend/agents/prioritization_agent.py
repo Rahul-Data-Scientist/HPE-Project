@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text, DateTime
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from db_connection import get_async_db_session, engine
+from .db_connection import get_async_db_session, engine
 
 # =========================
 # TABLE SCHEMA

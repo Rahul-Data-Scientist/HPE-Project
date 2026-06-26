@@ -10,8 +10,8 @@ import pandas as pd
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, DateTime, MetaData
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from db_connection import get_async_db_session, engine
-from vulnerability_agent import NVD_API_KEY
+from .db_connection import get_async_db_session, engine
+from .vulnerability_agent import NVD_API_KEY
 
 
 # =========================
