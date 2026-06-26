@@ -7,6 +7,7 @@ import asyncpg
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
+import urllib.parse
 
 import logging
 
@@ -29,11 +30,13 @@ from agents.parsing_agent import build_parsing_graph
 from agents.normalization_graph import build_normalization_graph
 from agents.main_workflow import run_remediation_pipeline
 from agents.asset_lookup_agent import asset_lookup_graph
-from agents.prioritization_graph import run_prioritization_agent
+from agents.prioritization_agent import run_prioritization_agent
 from agents.remediation_agent import build_graph, initialize_agent_components
 import pandas as pd
+from lib.utils import printS
+from lib.migrate import migrate_sqlite_to_psql
 
-from utils.migrate import migrate_sqlite_to_psql
+from dotenv import load_dotenv
 
 # --- PATH CONFIGURATION ---
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -47,14 +50,28 @@ WAITING_FOR_HUMAN_APPROVAL = "WAITING_FOR_HUMAN_APPROVAL"
 COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 RESUMING = "RESUMING"
+# Locate and load the environment variables from .env
+load_dotenv(override=True)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:vaibhav@localhost:5432/postgres")
+# Retrieve database connection variables
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+db_host = os.getenv("DB_HOST")
+db_port = os.getenv("DB_PORT", "5432")
+db_name = os.getenv("DB_NAME", "postgres")
+
+db_user = db_user.strip().strip('"').strip("'")
+db_password = db_password.strip().strip('"').strip("'")
+db_host = db_host.strip().strip('"').strip("'")
+db_port = db_port.strip().strip('"').strip("'")
+db_name = db_name.strip().strip('"').strip("'")
+
+db_password = urllib.parse.quote(db_password)
+
+DATABASE_URL = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
 # Global lock to prevent race conditions when multiple uploads happen simultaneously
 queue_lock = asyncio.Lock()
-
-async def printS(data):
-    print(data)
 
 # --- DATABASE UTILS ---
 async def init_database():
@@ -149,6 +166,14 @@ class ConnectionManager:
         if "log" in message or "status" in message or "node" in message:
             self.last_log_cache = message
             
+        # Update global tracker automatically
+        if "step" in message:
+            global_tracker.current_step = message["step"]
+        if "log" in message:
+            global_tracker.add_log(message["log"])
+        if message.get("type") == "QUEUE_CLEARED":
+            global_tracker.clear()
+            
         dead_connections = []
         for connection in self.active_connections:
             try:
@@ -161,6 +186,25 @@ class ConnectionManager:
             self.disconnect(dead)
 
 manager = ConnectionManager()
+
+# --- GLOBAL SYSTEM TRACKER ---
+class SystemTracker:
+    def __init__(self):
+        self.current_step = "Idle"
+        self.logs = []
+
+    def add_log(self, text: str):
+        time_str = datetime.now().strftime("%I:%M:%S %p")
+        self.logs.append({"time": time_str, "text": text})
+        # Keep terminal clean by only storing the last 100 logs
+        if len(self.logs) > 100:
+            self.logs.pop(0)
+            
+    def clear(self):
+        self.current_step = "Idle"
+        self.logs = []
+
+global_tracker = SystemTracker()
 
 # --- BACKGROUND QUEUE PROCESSOR ---
 NODE_LOG_MAP = {
@@ -488,6 +532,7 @@ async def resume_agent_background(thread_id: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[SYSTEM] Connecting to PostgreSQL...")
+    print(f"DEBUG URL: {DATABASE_URL}")
     app.state.pool = await asyncpg.create_pool(DATABASE_URL)
     
     await init_database()
@@ -615,7 +660,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         # Read the file asynchronously without blocking the event loop
         df = await asyncio.to_thread(pd.read_csv, str(WORKING_CSV_PATH))
         df = df.where(pd.notnull(df), None)
-        df.drop_duplicates(subset = ["vuln_id"], inplace = True)
+        # df.drop_duplicates(subset = ["vuln_id"], inplace = True)
         tasks = df.to_dict(orient="records")
         
         if not tasks:
@@ -630,6 +675,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         BATCH_LIMIT = 10
         top_tasks = tasks[:BATCH_LIMIT]
             
+        await manager.broadcast({"step": "Prioritization", "log": "[AGENT] ✅ Prioritization Completed! Evaluating severity thresholds..."})
         async with aiosqlite.connect(clean_path, timeout=10.0) as db:
             for task in tasks: # Fixed: Iterate over top_tasks only
                 if "thread_id" not in task or not task["thread_id"]:
@@ -670,8 +716,8 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
 async def github_webhook_listener(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     
-    async with aiofiles.open("github_webhook_payload2.json", "a", encoding="utf-8") as f:
-        await f.write(json.dumps(payload, indent=4) + "\n\n")
+    # async with aiofiles.open("github_webhook_payload2.json", "a", encoding="utf-8") as f:
+    #     await f.write(json.dumps(payload, indent=4) + "\n\n")
 
     event_type = request.headers.get("X-GitHub-Event")
     should_continue = False
@@ -736,14 +782,23 @@ async def get_system_state():
         async with db.execute("SELECT thread_id, cve_id, score, status, asset_id FROM vulnerabilities") as cursor:
             all_vulns = await cursor.fetchall()
 
-        vulns = [{"thread_id": v[0], "vuln_id": v[1], "score": v[2], "status": v[3], "asset_id" : v[4]} for v in all_vulns]
+        vulns = [{"thread_id": v[0], "vuln_id": v[1], "score": v[2], "status": v[3], "asset_id": v[4]} for v in all_vulns]
+
+        # Smart Step Recovery: If server rebooted but DB has data, infer the step
+        step = global_tracker.current_step
+        if step == "Idle" and len(vulns) > 0:
+            all_finished = all(v["status"] in ["RESOLVED", "FAILED"] for v in vulns)
+            step = "Resolved" if all_finished else "Remediation"
 
         return {
             "active_task": {"thread_id": active_row[0], "status": active_row[1]} if active_row else None,
             "metrics": {"pending": pending, "finished": finished, "total": total},
-            "vulnerabilities": vulns
+            "vulnerabilities": vulns,
+            "current_step": step,               # <-- Send current step
+            "recent_logs": global_tracker.logs  # <-- Send history of logs
         }
-
+        
+        
 # ==========================================
 # DASHBOARD REST ENDPOINT (PostgreSQL)
 # ==========================================
@@ -753,11 +808,17 @@ async def get_system_state():
 #     minutes, seconds = divmod(total_seconds, 60)
 #     return f"{minutes}m {seconds}s"
 
-def format_mttr(time_taken_seconds: float) -> str:
-    if not time_taken_seconds: 
+def format_mttr(time_taken) -> str:
+    if not time_taken: 
         return "0m 0s"
     
-    total_seconds = int(time_taken_seconds)
+    # If asyncpg returns a timedelta object (from PSQL INTERVAL)
+    if isinstance(time_taken, timedelta):
+        total_seconds = int(time_taken.total_seconds())
+    # Fallback if it returns a raw float or integer
+    else:
+        total_seconds = int(time_taken)
+        
     minutes, seconds = divmod(total_seconds, 60)
     return f"{minutes}m {seconds}s"
 
@@ -781,7 +842,7 @@ async def get_dashboard_data(request: Request):
                     COUNT(CASE WHEN resolved = false OR resolved IS NULL THEN 1 END) as pending_vulns,
                     COUNT(*) as total_vulns,
                     COALESCE(SUM(token), 0) as total_tokens
-                FROM vulnerabilities
+                FROM vulnerabilities_history 
             """)
             
             total_solved = int(kpi_row['total_solved'] or 0)
@@ -789,7 +850,7 @@ async def get_dashboard_data(request: Request):
             total_vulns = int(kpi_row['total_vulns'] or 0)
             success_rate = round((total_solved / total_vulns) * 100, 1) if total_vulns > 0 else 0
 
-            severities_rows = await conn.fetch("SELECT score FROM vulnerabilities")
+            severities_rows = await conn.fetch("SELECT score FROM vulnerabilities_history ")
             severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
             for row in severities_rows:
                 label, _ = get_severity_label_and_color(float(row['score']))
@@ -806,7 +867,7 @@ async def get_dashboard_data(request: Request):
                 SELECT 
                     TO_CHAR(DATE_TRUNC('hour', start_time), 'Mon DD, HH:MI AM') as time, 
                     SUM(token) as tokens
-                FROM vulnerabilities 
+                FROM vulnerabilities_history  
                 WHERE start_time IS NOT NULL
                 GROUP BY DATE_TRUNC('hour', start_time) 
                 ORDER BY DATE_TRUNC('hour', start_time) ASC
@@ -816,7 +877,7 @@ async def get_dashboard_data(request: Request):
 
             recent_rows = await conn.fetch("""
                 SELECT thread_id, cve_id, asset_id, score, resolved, end_time, start_time
-                FROM vulnerabilities 
+                FROM vulnerabilities_history  
                 ORDER BY COALESCE(end_time, start_time) DESC 
                 LIMIT 10
             """)
@@ -827,9 +888,9 @@ async def get_dashboard_data(request: Request):
                 timestamp = r['end_time'] if r['resolved'] else r['start_time']
                 recent_activity.append({
                     "id": r['cve_id'] or r['thread_id'],
-                    "name": f"vulnerabilities on {r['thread_id']}",
+                    "name": f"vulnerabilities on {r['asset_id']}",
                     "severity": label,
-                    "status": "Resolved" if r['resolved'] else "Pending",
+                    "status": "Resolved" if r['resolved'] else "Unresolved",
                     "time": timestamp.strftime('%H:%M %p') if timestamp else "N/A"
                 })
 
@@ -839,7 +900,7 @@ async def get_dashboard_data(request: Request):
                     "avg_mttr": format_mttr(kpi_row['raw_avg_mttr']),
                     "total_vulns": total_vulns,
                     "total_solved": total_solved,
-                    "total_tokens": int(kpi_row['total_tokens']),
+                    "total_tokens": int(kpi_row['total_tokens'])/total_solved,
                     "success_rate": success_rate,
                     "pending_vulns": pending_vulns
                 },
@@ -851,34 +912,6 @@ async def get_dashboard_data(request: Request):
         print(f"[API ERROR] Dashboard Data: {str(e)}")
         return {"error": str(e)}
 
-UPLOAD_DIR = PROJECT_ROOT / "raw_scanner_outputs"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True) 
-
-@app.post("/api/v1/upload-multiple")
-async def handle_multiple_uploads(files: list[UploadFile] = File(...)):
-    try:
-        await printS(f"-----Started Multiple File Upload ({len(files)} files)-----")
-        saved_files = []
-
-        for file in files:
-            file_path = UPLOAD_DIR / file.filename
-            async with aiofiles.open(file_path, 'wb') as out_file:
-                while content := await file.read(1024 * 1024):  
-                    await out_file.write(content)
-            
-            saved_files.append(file.filename)
-            await manager.broadcast({
-                "log": f"[SYSTEM] Successfully saved {file.filename} to {UPLOAD_DIR.name}/"
-            })
-
-        await printS("-----Uploads Saved to Disk Complete-----")
-        return {"status": "success", "saved_files": saved_files, "folder": str(UPLOAD_DIR)}
-
-    except Exception as e:
-        error_msg = str(e)
-        await manager.broadcast({"log": f"[CRITICAL ERROR] File save failed: {error_msg}"})
-        return {"status": "error", "message": error_msg}
-    
     
     
 # if __name__ == "__main__":

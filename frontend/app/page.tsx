@@ -72,9 +72,9 @@ export default function ExecutiveDashboard() {
     return [
       { title: "Avg Cost / Vuln", icon: DollarSign, value: `$${data.kpis.avg_cost.toFixed(2)}`, accent: 'text-[#01A982]', border: 'border-t-[#01A982]' },
       { title: "Avg MTTR / Vuln", icon: Clock, value: data.kpis.avg_mttr, accent: 'text-[#01A982]', border: 'border-t-[#01A982]' },
+      { title: "Tokens Used / Vuln", icon: Cpu, value: formatCompactNumber(data.kpis.total_tokens), subValue: data.kpis.total_tokens.toLocaleString(), accent: 'text-blue-500', border: 'border-t-blue-500' },
       { title: "Total Vulns", icon: Layers, value: data.kpis.total_vulns.toLocaleString(), accent: 'text-slate-700', border: 'border-t-slate-700' },
       { title: "Total Solved", icon: ShieldAlert, value: data.kpis.total_solved.toLocaleString(), accent: 'text-[#01A982]', border: 'border-t-[#01A982]' },
-      { title: "Tokens Used", icon: Cpu, value: formatCompactNumber(data.kpis.total_tokens), subValue: data.kpis.total_tokens.toLocaleString(), accent: 'text-blue-500', border: 'border-t-blue-500' },
     ];
   }, [data]);
 
