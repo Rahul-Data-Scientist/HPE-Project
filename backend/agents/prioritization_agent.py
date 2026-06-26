@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text, DateTime
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from db_connection import get_db_session, engine
+from db_connection import get_async_db_session, engine
 
 # =========================
 # TABLE SCHEMA
@@ -99,7 +99,7 @@ async def run_prioritization_agent(csv_file_path: str):
     
     max_retries = 3
     for attempt in range(max_retries):
-        session = get_db_session()
+        session = await get_async_db_session()
         try:
             result = await session.execute(query, {"a_ids": asset_ids, "v_ids": vuln_ids})
             rows = result.fetchall()
@@ -238,7 +238,7 @@ async def run_prioritization_agent(csv_file_path: str):
         
         max_retries = 3
         for attempt in range(max_retries):
-            session = get_db_session()
+            session = await get_async_db_session()
             try:
                 await session.execute(upsert_stmt, unique_records)
                 await session.commit()

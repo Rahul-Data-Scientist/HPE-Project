@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, DateTime, MetaData, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from db_connection import get_db_session
+from db_connection import get_async_db_session
 
 metadata = MetaData()
 
@@ -226,7 +226,7 @@ async def run_cron_sync():
         return
 
     # Filter against existing vulnerabilities in the database to prevent Foreign Key violations
-    db_session = get_db_session()
+    db_session = await get_async_db_session()
     try:
         existing_vulns_query = await db_session.execute(select(vulnerabilities_table.c.vuln_id))
         existing_vulns = {row[0] for row in existing_vulns_query.fetchall()}

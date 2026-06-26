@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, DateTime, MetaData
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from db_connection import get_db_session, engine
+from db_connection import get_async_db_session, engine
 from vulnerability_agent import NVD_API_KEY
 
 
@@ -276,7 +276,7 @@ async def run_vuln_intel_agent(csv_file_path: str):
     db_intel_fallback = {}
     max_retries = 3
     for attempt in range(max_retries):
-        session_db = get_db_session()
+        session_db = await get_async_db_session()
         try:
             query_result = await session_db.execute(
                 vulnerability_intel_table.select().where(vulnerability_intel_table.c.vuln_id.in_(vuln_ids))
@@ -370,7 +370,7 @@ async def run_vuln_intel_agent(csv_file_path: str):
         
         max_retries = 3
         for attempt in range(max_retries):
-            session_db = get_db_session()
+            session_db = await get_async_db_session()
             try:
                 await session_db.execute(upsert_stmt, unique_records)
                 await session_db.commit()
