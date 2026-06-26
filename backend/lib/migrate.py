@@ -90,7 +90,7 @@ if __name__ == "__main__":
     SQLITE_PATH = str(BASE_DIR / "state_db.sqlite")
     
     # Replace with your actual PostgreSQL connection string
-    PSQL_DSN = os.getenv("DATABASE_URL");
+    PSQL_DSN = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}";
     
     print(f"[SYSTEM] Looking for SQLite DB at: {SQLITE_PATH}")
     print("[SYSTEM] Running standalone database migration...")

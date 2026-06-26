@@ -7,7 +7,7 @@ import asyncpg
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
-
+import urllib.parse
 
 import logging
 
@@ -36,6 +36,8 @@ import pandas as pd
 from lib.utils import printS
 from lib.migrate import migrate_sqlite_to_psql
 
+from dotenv import load_dotenv
+
 # --- PATH CONFIGURATION ---
 PROJECT_ROOT = Path(__file__).resolve().parent
 DB_PATH = str(PROJECT_ROOT / "state_db.sqlite")
@@ -48,8 +50,25 @@ WAITING_FOR_HUMAN_APPROVAL = "WAITING_FOR_HUMAN_APPROVAL"
 COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 RESUMING = "RESUMING"
+# Locate and load the environment variables from .env
+load_dotenv(override=True)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Retrieve database connection variables
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+db_host = os.getenv("DB_HOST")
+db_port = os.getenv("DB_PORT", "5432")
+db_name = os.getenv("DB_NAME", "postgres")
+
+db_user = db_user.strip().strip('"').strip("'")
+db_password = db_password.strip().strip('"').strip("'")
+db_host = db_host.strip().strip('"').strip("'")
+db_port = db_port.strip().strip('"').strip("'")
+db_name = db_name.strip().strip('"').strip("'")
+
+db_password = urllib.parse.quote(db_password)
+
+DATABASE_URL = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
 # Global lock to prevent race conditions when multiple uploads happen simultaneously
 queue_lock = asyncio.Lock()
@@ -513,6 +532,7 @@ async def resume_agent_background(thread_id: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[SYSTEM] Connecting to PostgreSQL...")
+    print(f"DEBUG URL: {DATABASE_URL}")
     app.state.pool = await asyncpg.create_pool(DATABASE_URL)
     
     await init_database()
@@ -788,11 +808,17 @@ async def get_system_state():
 #     minutes, seconds = divmod(total_seconds, 60)
 #     return f"{minutes}m {seconds}s"
 
-def format_mttr(time_taken_seconds: float) -> str:
-    if not time_taken_seconds: 
+def format_mttr(time_taken) -> str:
+    if not time_taken: 
         return "0m 0s"
     
-    total_seconds = int(time_taken_seconds)
+    # If asyncpg returns a timedelta object (from PSQL INTERVAL)
+    if isinstance(time_taken, timedelta):
+        total_seconds = int(time_taken.total_seconds())
+    # Fallback if it returns a raw float or integer
+    else:
+        total_seconds = int(time_taken)
+        
     minutes, seconds = divmod(total_seconds, 60)
     return f"{minutes}m {seconds}s"
 
@@ -864,7 +890,7 @@ async def get_dashboard_data(request: Request):
                     "id": r['cve_id'] or r['thread_id'],
                     "name": f"vulnerabilities on {r['asset_id']}",
                     "severity": label,
-                    "status": "Resolved" if r['resolved'] else "Pending",
+                    "status": "Resolved" if r['resolved'] else "Unresolved",
                     "time": timestamp.strftime('%H:%M %p') if timestamp else "N/A"
                 })
 
@@ -874,7 +900,7 @@ async def get_dashboard_data(request: Request):
                     "avg_mttr": format_mttr(kpi_row['raw_avg_mttr']),
                     "total_vulns": total_vulns,
                     "total_solved": total_solved,
-                    "total_tokens": int(kpi_row['total_tokens']),
+                    "total_tokens": int(kpi_row['total_tokens'])/total_solved,
                     "success_rate": success_rate,
                     "pending_vulns": pending_vulns
                 },
