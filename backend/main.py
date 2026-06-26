@@ -49,12 +49,10 @@ COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 RESUMING = "RESUMING"
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:vaibhav@localhost:5432/postgres")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Global lock to prevent race conditions when multiple uploads happen simultaneously
 queue_lock = asyncio.Lock()
-
-
 
 # --- DATABASE UTILS ---
 async def init_database():
@@ -149,7 +147,7 @@ class ConnectionManager:
         if "log" in message or "status" in message or "node" in message:
             self.last_log_cache = message
             
-        # 👇 NEW: Update global tracker automatically
+        # Update global tracker automatically
         if "step" in message:
             global_tracker.current_step = message["step"]
         if "log" in message:
@@ -642,7 +640,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         # Read the file asynchronously without blocking the event loop
         df = await asyncio.to_thread(pd.read_csv, str(WORKING_CSV_PATH))
         df = df.where(pd.notnull(df), None)
-        df.drop_duplicates(subset = ["vuln_id"], inplace = True)
+        # df.drop_duplicates(subset = ["vuln_id"], inplace = True)
         tasks = df.to_dict(orient="records")
         
         if not tasks:
@@ -818,7 +816,7 @@ async def get_dashboard_data(request: Request):
                     COUNT(CASE WHEN resolved = false OR resolved IS NULL THEN 1 END) as pending_vulns,
                     COUNT(*) as total_vulns,
                     COALESCE(SUM(token), 0) as total_tokens
-                FROM vulnerabilities
+                FROM vulnerabilities_history 
             """)
             
             total_solved = int(kpi_row['total_solved'] or 0)
@@ -826,7 +824,7 @@ async def get_dashboard_data(request: Request):
             total_vulns = int(kpi_row['total_vulns'] or 0)
             success_rate = round((total_solved / total_vulns) * 100, 1) if total_vulns > 0 else 0
 
-            severities_rows = await conn.fetch("SELECT score FROM vulnerabilities")
+            severities_rows = await conn.fetch("SELECT score FROM vulnerabilities_history ")
             severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
             for row in severities_rows:
                 label, _ = get_severity_label_and_color(float(row['score']))
@@ -843,7 +841,7 @@ async def get_dashboard_data(request: Request):
                 SELECT 
                     TO_CHAR(DATE_TRUNC('hour', start_time), 'Mon DD, HH:MI AM') as time, 
                     SUM(token) as tokens
-                FROM vulnerabilities 
+                FROM vulnerabilities_history  
                 WHERE start_time IS NOT NULL
                 GROUP BY DATE_TRUNC('hour', start_time) 
                 ORDER BY DATE_TRUNC('hour', start_time) ASC
@@ -853,7 +851,7 @@ async def get_dashboard_data(request: Request):
 
             recent_rows = await conn.fetch("""
                 SELECT thread_id, cve_id, asset_id, score, resolved, end_time, start_time
-                FROM vulnerabilities 
+                FROM vulnerabilities_history  
                 ORDER BY COALESCE(end_time, start_time) DESC 
                 LIMIT 10
             """)
@@ -864,7 +862,7 @@ async def get_dashboard_data(request: Request):
                 timestamp = r['end_time'] if r['resolved'] else r['start_time']
                 recent_activity.append({
                     "id": r['cve_id'] or r['thread_id'],
-                    "name": f"vulnerabilities on {r['thread_id']}",
+                    "name": f"vulnerabilities on {r['asset_id']}",
                     "severity": label,
                     "status": "Resolved" if r['resolved'] else "Pending",
                     "time": timestamp.strftime('%H:%M %p') if timestamp else "N/A"
