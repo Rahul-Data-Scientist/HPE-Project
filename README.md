@@ -39,7 +39,7 @@ Before setting up the project locally, ensure you have the following installed:
 
 ### 1. Clone the Repository
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/Rahul-Data-Scientist/Zero-Touch-Vulnerability-Remediation
 cd zero-touch-vulnerability-remediation
 ```
 ### 2. Backend Setup
