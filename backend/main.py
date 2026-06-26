@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+
 import logging
 
 # Quiet down the underlying HTTP client libraries
@@ -32,8 +33,8 @@ from agents.asset_lookup_agent import asset_lookup_graph
 from agents.prioritization_agent import run_prioritization_agent
 from agents.remediation_agent import build_graph, initialize_agent_components
 import pandas as pd
-
-from utils.migrate import migrate_sqlite_to_psql
+from lib.utils import printS
+from lib.migrate import migrate_sqlite_to_psql
 
 # --- PATH CONFIGURATION ---
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -53,8 +54,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:vaibhav@localhos
 # Global lock to prevent race conditions when multiple uploads happen simultaneously
 queue_lock = asyncio.Lock()
 
-async def printS(data):
-    print(data)
+
 
 # --- DATABASE UTILS ---
 async def init_database():
@@ -888,34 +888,6 @@ async def get_dashboard_data(request: Request):
         print(f"[API ERROR] Dashboard Data: {str(e)}")
         return {"error": str(e)}
 
-UPLOAD_DIR = PROJECT_ROOT / "raw_scanner_outputs"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True) 
-
-@app.post("/api/v1/upload-multiple")
-async def handle_multiple_uploads(files: list[UploadFile] = File(...)):
-    try:
-        await printS(f"-----Started Multiple File Upload ({len(files)} files)-----")
-        saved_files = []
-
-        for file in files:
-            file_path = UPLOAD_DIR / file.filename
-            async with aiofiles.open(file_path, 'wb') as out_file:
-                while content := await file.read(1024 * 1024):  
-                    await out_file.write(content)
-            
-            saved_files.append(file.filename)
-            await manager.broadcast({
-                "log": f"[SYSTEM] Successfully saved {file.filename} to {UPLOAD_DIR.name}/"
-            })
-
-        await printS("-----Uploads Saved to Disk Complete-----")
-        return {"status": "success", "saved_files": saved_files, "folder": str(UPLOAD_DIR)}
-
-    except Exception as e:
-        error_msg = str(e)
-        await manager.broadcast({"log": f"[CRITICAL ERROR] File save failed: {error_msg}"})
-        return {"status": "error", "message": error_msg}
-    
     
     
 # if __name__ == "__main__":

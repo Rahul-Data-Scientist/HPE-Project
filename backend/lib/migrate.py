@@ -2,9 +2,8 @@ import aiosqlite
 import asyncpg
 from pathlib import Path
 from datetime import datetime, timedelta
+from .utils import printS
 
-async def printS(data):
-    print(data)
 
 async def migrate_sqlite_to_psql(sqlite_path: str, psql_dsn: str) -> dict:
     """
