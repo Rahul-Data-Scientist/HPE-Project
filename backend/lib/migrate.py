@@ -2,9 +2,9 @@ import aiosqlite
 import asyncpg
 from pathlib import Path
 from datetime import datetime, timedelta
+from .utils import printS
+import os
 
-async def printS(data):
-    print(data)
 
 async def migrate_sqlite_to_psql(sqlite_path: str, psql_dsn: str) -> dict:
     """
@@ -52,7 +52,7 @@ async def migrate_sqlite_to_psql(sqlite_path: str, psql_dsn: str) -> dict:
         await printS("Working here..........")
         try:
             query = """
-                INSERT INTO vulnerabilities (
+                INSERT INTO vulnerabilities_history (
                     asset_id, cve_id, score, resolved, cost, token, 
                     start_time, end_time, time_taken
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     SQLITE_PATH = str(BASE_DIR / "state_db.sqlite")
     
     # Replace with your actual PostgreSQL connection string
-    PSQL_DSN = "postgresql://postgres:vaibhav@localhost:5432/postgres"
+    PSQL_DSN = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}";
     
     print(f"[SYSTEM] Looking for SQLite DB at: {SQLITE_PATH}")
     print("[SYSTEM] Running standalone database migration...")

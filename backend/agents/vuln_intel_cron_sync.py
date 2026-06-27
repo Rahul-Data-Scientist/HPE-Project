@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, DateTime, MetaData, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from db_connection import get_async_db_session
+from .db_connection import get_async_db_session
 
 metadata = MetaData()
 

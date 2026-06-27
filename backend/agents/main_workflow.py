@@ -42,8 +42,8 @@ import os
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 
-from vulnerability_agent import run_vulnerability_agent
-from vuln_intel_agent import run_vuln_intel_agent
+from .vulnerability_agent import run_vulnerability_agent
+from .vuln_intel_agent import run_vuln_intel_agent
 
 
 # =========================
