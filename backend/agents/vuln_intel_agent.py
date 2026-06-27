@@ -61,127 +61,53 @@ def _build_session() -> aiohttp.ClientSession:
 
 
 # =========================
-# EPSS BULK DOWNLOAD
+# TARGETED EPSS API DOWNLOAD
 # =========================
 
-_EPSS_GZIP_URLS = [
-    "https://epss.cyentia.com/epss_scores-current.csv.gz",
-    "https://api.first.org/data/v1/epss?format=csv.gz",
-]
-
-async def _download_epss_gzip(session: aiohttp.ClientSession) -> dict:
-    for url in _EPSS_GZIP_URLS:
+async def fetch_epss_batch(session: aiohttp.ClientSession, cve_ids: list) -> dict:
+    """Fetches EPSS scores for multiple specific CVEs using a single batched API call."""
+    print(f"Fetching EPSS scores for {len(cve_ids)} missing vulnerabilities via API...")
+    results = {}
+    chunk_size = 100 # FIRST.org API supports multiple CVEs separated by comma
+    
+    for i in range(0, len(cve_ids), chunk_size):
+        chunk = cve_ids[i:i+chunk_size]
+        cve_param = ",".join(chunk)
+        url = f"https://api.first.org/data/v1/epss?cve={cve_param}"
         try:
-            print(f"  Trying EPSS gzip URL: {url}")
-            resp = await _get_with_retry(session, url, timeout=60)
+            resp = await _get_with_retry(session, url, timeout=15)
             if resp and resp.status == 200:
-                raw = await resp.read()
-                def parse_csv(raw_data):
-                    with gzip.open(io.BytesIO(raw_data), "rt") as f:
-                        epss_df = pd.read_csv(f, comment="#")
-                    if "cve" in epss_df.columns and "epss" in epss_df.columns:
-                        return dict(zip(epss_df["cve"], epss_df["epss"].astype(float)))
-                    return {}
-                result = await asyncio.to_thread(parse_csv, raw)
-                if result:
-                    print(f"  EPSS gzip success: {len(result):,} scores downloaded.")
-                    return result
-            else:
-                print(f"  EPSS gzip URL failed or returned bad HTTP status")
+                data = await resp.json()
+                for item in data.get("data", []):
+                    cve = item.get("cve")
+                    score = item.get("epss")
+                    if cve and score is not None:
+                        results[cve] = float(score)
         except Exception as exc:
-            print(f"  EPSS gzip URL failed: {exc}")
-    return {}
-
-async def _download_epss_json_bulk(session: aiohttp.ClientSession, page_size: int = 10000) -> dict:
-    print("  Falling back to EPSS JSON bulk API (paginated)...")
-    base_url = "https://api.first.org/data/v1/epss"
-    result = {}
-    offset = 0
-
-    try:
-        resp = await _get_with_retry(session, base_url, params={"limit": 1, "offset": 0}, timeout=15)
-        if not resp or resp.status != 200:
-            print(f"  EPSS JSON API returned bad HTTP status")
-            return {}
-            
-        data = await resp.json()
-        total = int(data.get("total", 0))
-        if total == 0:
-            print("  EPSS JSON API reported 0 total records.")
-            return {}
-
-        pages = math.ceil(total / page_size)
-        print(f"  EPSS JSON API total={total:,} records, fetching {pages} page(s)...")
-
-        for page in range(pages):
-            resp = await _get_with_retry(session, base_url, params={"limit": page_size, "offset": offset}, timeout=30)
-            if not resp or resp.status != 200:
-                print(f"  EPSS JSON page {page+1} failed")
-                break
-                
-            page_data = await resp.json()
-            items = page_data.get("data", [])
-            for item in items:
-                cve = item.get("cve")
-                score = item.get("epss")
-                if cve and score is not None:
-                    result[cve] = float(score)
-            offset += page_size
-            await asyncio.sleep(0.5)
-
-        print(f"  EPSS JSON bulk done: {len(result):,} scores fetched.")
-    except Exception as exc:
-        print(f"  EPSS JSON bulk error: {exc}")
-    return result
-
-async def _fetch_single_epss_score(cve_id: str, session: aiohttp.ClientSession):
-    url = f"https://api.first.org/data/v1/epss?cve={cve_id}"
-    try:
-        resp = await _get_with_retry(session, url, timeout=10)
-        if resp and resp.status == 200:
-            data = await resp.json()
-            items = data.get("data", [])
-            if items:
-                return float(items[0].get("epss", 0.0))
-    except Exception as exc:
-        print(f"  Single EPSS lookup failed for {cve_id}: {exc}")
-    return None
-
-async def download_epss_scores() -> dict:
-    print("Downloading EPSS scores (bulk priority)...")
-    async with _build_session() as session:
-        scores = await _download_epss_gzip(session)
-        if scores:
-            return scores
-
-        print("  Primary gzip failed. Trying JSON bulk API...")
-        scores = await _download_epss_json_bulk(session)
-        if scores:
-            return scores
-
-        print("  WARNING: Both bulk EPSS methods failed. Per-CVE fallback will be used.")
-        return {}
+            print(f"  EPSS batch API error for chunk: {exc}")
+    
+    print(f"Retrieved {len(results)} EPSS scores via batched API fallback.")
+    return results
 
 
 # =========================
 # CISA KEV BULK DOWNLOAD
 # =========================
 
-async def download_cisa_kev_cves() -> set:
-    print("Downloading CISA KEV feed...")
+async def download_cisa_kev_cves(session: aiohttp.ClientSession) -> set:
+    print("Downloading CISA KEV feed for missing vulnerabilities...")
     url = "https://cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-    async with _build_session() as session:
-        try:
-            resp = await _get_with_retry(session, url, timeout=30)
-            if resp and resp.status == 200:
-                data = await resp.json()
-                kev_cves = {item["cveID"] for item in data.get("vulnerabilities", [])}
-                print(f"Downloaded {len(kev_cves):,} CISA KEV CVEs.")
-                return kev_cves
-            else:
-                print(f"CISA KEV feed returned bad HTTP status")
-        except Exception as exc:
-            print(f"Error downloading CISA KEV feed: {exc}")
+    try:
+        resp = await _get_with_retry(session, url, timeout=30)
+        if resp and resp.status == 200:
+            data = await resp.json()
+            kev_cves = {item["cveID"] for item in data.get("vulnerabilities", [])}
+            print(f"Downloaded {len(kev_cves):,} CISA KEV CVEs.")
+            return kev_cves
+        else:
+            print(f"CISA KEV feed returned bad HTTP status")
+    except Exception as exc:
+        print(f"Error downloading CISA KEV feed: {exc}")
     return set()
 
 
@@ -189,31 +115,30 @@ async def download_cisa_kev_cves() -> set:
 # EXPLOIT-DB BULK DOWNLOAD
 # =========================
 
-async def download_exploit_db_cves() -> dict:
-    print("Downloading Exploit-DB feed from GitLab...")
+async def download_exploit_db_cves(session: aiohttp.ClientSession) -> dict:
+    print("Downloading Exploit-DB feed for missing vulnerabilities...")
     url = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv"
-    async with _build_session() as session:
-        try:
-            resp = await _get_with_retry(session, url, timeout=45)
-            if resp and resp.status == 200:
-                text_data = await resp.text()
-                def parse_exploit_db(text):
-                    exploit_db_df = pd.read_csv(io.StringIO(text))
-                    exploit_db_map: dict = {}
-                    for _, row in exploit_db_df.iterrows():
-                        codes = str(row.get("codes", ""))
-                        cves = re.findall(r"CVE-\d{4}-\d{4,7}", codes, re.IGNORECASE)
-                        for cve in cves:
-                            key = cve.upper()
-                            exploit_db_map[key] = exploit_db_map.get(key, 0) + 1
-                    return exploit_db_map
-                exploit_db_map = await asyncio.to_thread(parse_exploit_db, text_data)
-                print(f"Exploit-DB: {len(exploit_db_map):,} CVEs mapped to exploits.")
+    try:
+        resp = await _get_with_retry(session, url, timeout=45)
+        if resp and resp.status == 200:
+            text_data = await resp.text()
+            def parse_exploit_db(text):
+                exploit_db_df = pd.read_csv(io.StringIO(text))
+                exploit_db_map: dict = {}
+                for _, row in exploit_db_df.iterrows():
+                    codes = str(row.get("codes", ""))
+                    cves = re.findall(r"CVE-\d{4}-\d{4,7}", codes, re.IGNORECASE)
+                    for cve in cves:
+                        key = cve.upper()
+                        exploit_db_map[key] = exploit_db_map.get(key, 0) + 1
                 return exploit_db_map
-            else:
-                print(f"Exploit-DB feed returned bad HTTP status")
-        except Exception as exc:
-            print(f"Error downloading Exploit-DB feed: {exc}")
+            exploit_db_map = await asyncio.to_thread(parse_exploit_db, text_data)
+            print(f"Exploit-DB: {len(exploit_db_map):,} CVEs mapped to exploits.")
+            return exploit_db_map
+        else:
+            print(f"Exploit-DB feed returned bad HTTP status")
+    except Exception as exc:
+        print(f"Error downloading Exploit-DB feed: {exc}")
     return {}
 
 
@@ -260,20 +185,15 @@ async def run_vuln_intel_agent(csv_file_path: str):
         print("No vulnerability IDs to process.")
         return
 
-    # ------ Bulk downloads (all done once before row iteration) ------
-    kev_task = asyncio.create_task(download_cisa_kev_cves())
-    epss_task = asyncio.create_task(download_epss_scores())
-    exploit_db_task = asyncio.create_task(download_exploit_db_cves())
-
-    kev_cves, epss_scores, exploit_db_map = await asyncio.gather(kev_task, epss_task, exploit_db_task)
-
     # Ensure intel columns exist in the DataFrame
     for col in ["epss_score", "kev_flag", "exploit_exists", "exploit_count"]:
         if col not in df.columns:
             df[col] = 0.0 if col == "epss_score" else 0
 
-    # ------ Fetch Database Fallback ------
-    db_intel_fallback = {}
+    # ------ 1. DB First Strategy ------
+    db_intel_cache = {}
+    print(f"Querying database cache as primary source of truth for {len(vuln_ids)} vulnerabilities...")
+    
     max_retries = 3
     for attempt in range(max_retries):
         session_db = await get_async_db_session()
@@ -283,7 +203,7 @@ async def run_vuln_intel_agent(csv_file_path: str):
             )
             rows = query_result.fetchall()
             for row in rows:
-                db_intel_fallback[row.vuln_id] = {
+                db_intel_cache[row.vuln_id] = {
                     "epss_score": row.epss_score,
                     "kev_flag": row.kev_flag,
                     "exploit_exists": row.exploit_exists,
@@ -291,55 +211,64 @@ async def run_vuln_intel_agent(csv_file_path: str):
                 }
             break
         except Exception as exc:
-            print(f"Error fetching DB fallback on attempt {attempt + 1}/{max_retries}: {exc}")
+            print(f"Error fetching DB on attempt {attempt + 1}/{max_retries}: {exc}")
             if attempt < max_retries - 1:
                 await asyncio.sleep(2)
             else:
-                print("Max DB retries reached for fallback.")
+                print("Max DB retries reached. Database fetch failed.")
         finally:
             await session_db.close()
+
+    print(f"Found {len(db_intel_cache)} vulnerabilities in local database cache.")
+
+    # ------ 2. Identify Missing Vulnerabilities ------
+    missing_cves = [vid for vid in vuln_ids if vid not in db_intel_cache]
+    
+    kev_cves = set()
+    exploit_db_map = {}
+    epss_results = {}
+    
+    if missing_cves:
+        print(f"Missing intel for {len(missing_cves)} vulnerabilities. Initiating API fallbacks...")
+        async with _build_session() as http_session:
+            # Concurrently run the EPSS API batch fetch and the two bulk downloads
+            epss_task = asyncio.create_task(fetch_epss_batch(http_session, missing_cves))
+            kev_task = asyncio.create_task(download_cisa_kev_cves(http_session))
+            exploit_db_task = asyncio.create_task(download_exploit_db_cves(http_session))
+            
+            results = await asyncio.gather(epss_task, kev_task, exploit_db_task)
+            epss_results, kev_cves, exploit_db_map = results
+    else:
+        print("All vulnerabilities found in database! Bypassing all external API calls.")
 
     records_to_upsert = []
     current_time = datetime.utcnow()
 
-    # ------ Row-level enrichment ------
-    async with _build_session() as fallback_session:
-        for index, row in df.iterrows():
-            vuln_id = row["vuln_id"]
-            if pd.isna(vuln_id):
-                continue
+    # ------ 3. Row-level assignment & Merging ------
+    for index, row in df.iterrows():
+        vuln_id = row["vuln_id"]
+        if pd.isna(vuln_id):
+            continue
 
-            # EPSS: bulk dict first, per-CVE API only if CVE not in bulk data
-            epss_score = epss_scores.get(vuln_id)
-            if epss_score is None:
-                print(f"  EPSS bulk failed or missing. Trying per-CVE API for {vuln_id}...")
-                epss_score = await _fetch_single_epss_score(vuln_id, fallback_session)
-
-            # If per-CVE API failed (or timed out), fallback to DB
-            if epss_score is None:
-                if vuln_id in db_intel_fallback:
-                    print(f"  EPSS API completely failed. Falling back to DB cache for {vuln_id}...")
-                    epss_score = db_intel_fallback[vuln_id]["epss_score"]
-                else:
-                    epss_score = 0.0
-
-            # KEV and ExploitDB: If bulk lists are completely empty, we assume APIs failed
-            if not kev_cves and vuln_id in db_intel_fallback:
-                kev_flag = db_intel_fallback[vuln_id]["kev_flag"]
-            else:
-                kev_flag = 1 if vuln_id in kev_cves else 0
-
-            if not exploit_db_map and vuln_id in db_intel_fallback:
-                exploit_exists = db_intel_fallback[vuln_id]["exploit_exists"]
-                exploit_count = db_intel_fallback[vuln_id]["exploit_count"]
-            else:
-                exploit_exists, exploit_count = check_exploit_info(vuln_id, bool(kev_flag), exploit_db_map)
-
+        if vuln_id in db_intel_cache:
+            # 100% DB Cache Hit
+            cache_hit = db_intel_cache[vuln_id]
+            df.at[index, "epss_score"]    = cache_hit["epss_score"]
+            df.at[index, "kev_flag"]      = cache_hit["kev_flag"]
+            df.at[index, "exploit_exists"] = cache_hit["exploit_exists"]
+            df.at[index, "exploit_count"]  = cache_hit["exploit_count"]
+        else:
+            # Newly Fetched API Data
+            epss_score = epss_results.get(vuln_id, 0.0)
+            kev_flag = 1 if vuln_id in kev_cves else 0
+            exploit_exists, exploit_count = check_exploit_info(vuln_id, bool(kev_flag), exploit_db_map)
+            
             df.at[index, "epss_score"]    = epss_score
             df.at[index, "kev_flag"]      = kev_flag
             df.at[index, "exploit_exists"] = exploit_exists
             df.at[index, "exploit_count"]  = exploit_count
-
+            
+            # Stage for DB Update
             records_to_upsert.append({
                 "vuln_id":       vuln_id,
                 "epss_score":    float(epss_score),
@@ -353,10 +282,10 @@ async def run_vuln_intel_agent(csv_file_path: str):
     await asyncio.to_thread(df.to_csv, csv_file_path, index=False)
     print(f"Saved enriched intel data to {csv_file_path}")
 
-    # ------ Batch DB upsert (deduplicated by vuln_id) ------
+    # ------ 4. Batch DB upsert for missing records only ------
     if records_to_upsert:
         unique_records = list({r["vuln_id"]: r for r in records_to_upsert}.values())
-        print(f"Batch upserting {len(unique_records)} intel records to DB...")
+        print(f"Batch upserting {len(unique_records)} new intel records to database cache...")
         stmt = pg_insert(vulnerability_intel_table)
         update_cols = {
             col.name: stmt.excluded[col.name]
@@ -387,7 +316,7 @@ async def run_vuln_intel_agent(csv_file_path: str):
             finally:
                 await session_db.close()
     else:
-        print("No records to upsert.")
+        print("No new records to upsert to database.")
 
 if __name__ == "__main__":
     asyncio.run(run_vuln_intel_agent("final_working.csv"))
