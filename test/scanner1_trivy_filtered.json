@@ -24,60 +24,32 @@
               "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
             }
           },
-          "Title": "CVE-2021-44228: Apache Log4j2 JNDI lookups can be exploited to execute arbit...",
-          "Description": "Apache Log4j2 JNDI lookups can be exploited to execute arbitrary code via a crafted string in any location where Log4j logs are enabled.",
+          "Title": "CVE-2021-44228: Apache Log4j2 JNDI lookup RCE",
+          "Description": "Apache Log4j2 JNDI lookups can be exploited to execute arbitrary code.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
-            "https://logging.apache.org/log4j/2.x/security.html",
-            "https://github.com/advisories/GHSA-jfh8-c2jp-hdp8"
+            "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
           ],
           "Port": 8443,
           "InstanceID": "i-a1b2c3",
           "IP": "172.16.10.11"
         },
         {
-          "VulnerabilityID": "CVE-2021-44228",
+          "VulnerabilityID": "CVE-2021-45046",
           "PkgName": "log4j-core",
           "InstalledVersion": "2.14.1",
-          "FixedVersion": "2.15.0",
+          "FixedVersion": "2.16.0",
           "Severity": "CRITICAL",
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 10.0,
-              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
+              "V3Score": 9.0,
+              "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:H"
             }
           },
-          "Title": "CVE-2021-44228: Apache Log4j2 JNDI lookups can be exploited to execute arbit...",
-          "Description": "Apache Log4j2 JNDI lookups can be exploited to execute arbitrary code via a crafted string in any location where Log4j logs are enabled.",
+          "Title": "CVE-2021-45046: Log4j RCE bypass",
+          "Description": "Additional remote code execution vulnerability in Log4j.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
-            "https://logging.apache.org/log4j/2.x/security.html",
-            "https://github.com/advisories/GHSA-jfh8-c2jp-hdp8"
-          ],
-          "Port": 8443,
-          "InstanceID": "i-a1b2c3",
-          "IP": "172.16.10.11"
-        },
-        {
-          "VulnerabilityID": "CVE-2021-44228",
-          "PkgName": "log4j-core",
-          "InstalledVersion": "2.14.1",
-          "FixedVersion": "2.15.0",
-          "Severity": "CRITICAL",
-          "SeveritySource": "nvd",
-          "CVSS": {
-            "nvd": {
-              "V3Score": 10.0,
-              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H"
-            }
-          },
-          "Title": "CVE-2021-44228: Apache Log4j2 JNDI lookups can be exploited to execute arbit...",
-          "Description": "Apache Log4j2 JNDI lookups can be exploited to execute arbitrary code via a crafted string in any location where Log4j logs are enabled.",
-          "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
-            "https://logging.apache.org/log4j/2.x/security.html",
-            "https://github.com/advisories/GHSA-jfh8-c2jp-hdp8"
+            "https://nvd.nist.gov/vuln/detail/CVE-2021-45046"
           ],
           "Port": 8443,
           "InstanceID": "i-a1b2c3",
@@ -106,60 +78,32 @@
               "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
             }
           },
-          "Title": "CVE-2020-1938: Apache Tomcat AJP connector (Ghostcat) allows reading of web...",
-          "Description": "Apache Tomcat AJP connector (Ghostcat) allows reading of web app files and RCE if the app allows file upload.",
+          "Title": "CVE-2020-1938: Ghostcat",
+          "Description": "Apache Tomcat AJP connector vulnerability.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2020-1938",
-            "https://tomcat.apache.org/security-9.html",
-            "https://github.com/YDHCUI/CNVD-2020-10487-Tomcat-Ajp-lfi"
+            "https://nvd.nist.gov/vuln/detail/CVE-2020-1938"
           ],
           "Port": 8501,
           "InstanceID": null,
           "IP": "172.16.10.16"
         },
         {
-          "VulnerabilityID": "CVE-2020-1938",
+          "VulnerabilityID": "CVE-2021-25329",
           "PkgName": "tomcat",
           "InstalledVersion": "9.0.1",
-          "FixedVersion": "9.0.31",
-          "Severity": "CRITICAL",
+          "FixedVersion": "9.0.45",
+          "Severity": "HIGH",
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 9.8,
+              "V3Score": 8.8,
               "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
             }
           },
-          "Title": "CVE-2020-1938: Apache Tomcat AJP connector (Ghostcat) allows reading of web...",
-          "Description": "Apache Tomcat AJP connector (Ghostcat) allows reading of web app files and RCE if the app allows file upload.",
+          "Title": "CVE-2021-25329: Apache Tomcat vulnerability",
+          "Description": "Apache Tomcat remote attack surface issue.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2020-1938",
-            "https://tomcat.apache.org/security-9.html",
-            "https://github.com/YDHCUI/CNVD-2020-10487-Tomcat-Ajp-lfi"
-          ],
-          "Port": 8501,
-          "InstanceID": null,
-          "IP": "172.16.10.16"
-        },
-        {
-          "VulnerabilityID": "CVE-2020-1938",
-          "PkgName": "tomcat",
-          "InstalledVersion": "9.0.1",
-          "FixedVersion": "9.0.31",
-          "Severity": "CRITICAL",
-          "SeveritySource": "nvd",
-          "CVSS": {
-            "nvd": {
-              "V3Score": 9.8,
-              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-            }
-          },
-          "Title": "CVE-2020-1938: Apache Tomcat AJP connector (Ghostcat) allows reading of web...",
-          "Description": "Apache Tomcat AJP connector (Ghostcat) allows reading of web app files and RCE if the app allows file upload.",
-          "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2020-1938",
-            "https://tomcat.apache.org/security-9.html",
-            "https://github.com/YDHCUI/CNVD-2020-10487-Tomcat-Ajp-lfi"
+            "https://nvd.nist.gov/vuln/detail/CVE-2021-25329"
           ],
           "Port": 8501,
           "InstanceID": null,
@@ -188,62 +132,34 @@
               "V3Vector": "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
             }
           },
-          "Title": "CVE-2019-0708: BlueKeep: A remote code execution vulnerability exists in Re...",
-          "Description": "BlueKeep: A remote code execution vulnerability exists in Remote Desktop Services \u2013 formerly known as Terminal Services \u2013 when an unauthenticated attacker connects using RDP.",
+          "Title": "CVE-2019-0708: BlueKeep",
+          "Description": "Remote Desktop Services RCE.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2019-0708",
-            "https://portal.msrc.microsoft.com/en-US/security-guidance/advisory/CVE-2019-0708",
-            "https://github.com/rapid7/metasploit-framework/pull/12283"
+            "https://nvd.nist.gov/vuln/detail/CVE-2019-0708"
           ],
-          "Port": null,
+          "Port": 3389,
           "InstanceID": "i-j1k2l3",
           "IP": "172.16.10.17"
         },
         {
-          "VulnerabilityID": "CVE-2019-0708",
+          "VulnerabilityID": "CVE-2019-1181",
           "PkgName": "rdp-service",
           "InstalledVersion": "7.0",
           "FixedVersion": "patched",
-          "Severity": "CRITICAL",
+          "Severity": "HIGH",
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 9.8,
-              "V3Vector": "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+              "V3Score": 7.5,
+              "V3Vector": "CVSS:3.0/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
             }
           },
-          "Title": "CVE-2019-0708: BlueKeep: A remote code execution vulnerability exists in Re...",
-          "Description": "BlueKeep: A remote code execution vulnerability exists in Remote Desktop Services \u2013 formerly known as Terminal Services \u2013 when an unauthenticated attacker connects using RDP.",
+          "Title": "CVE-2019-1181: RDP vulnerability",
+          "Description": "RDP remote code execution issue.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2019-0708",
-            "https://portal.msrc.microsoft.com/en-US/security-guidance/advisory/CVE-2019-0708",
-            "https://github.com/rapid7/metasploit-framework/pull/12283"
+            "https://nvd.nist.gov/vuln/detail/CVE-2019-1181"
           ],
-          "Port": null,
-          "InstanceID": "i-j1k2l3",
-          "IP": "172.16.10.17"
-        },
-        {
-          "VulnerabilityID": "CVE-2019-0708",
-          "PkgName": "rdp-service",
-          "InstalledVersion": "7.0",
-          "FixedVersion": "patched",
-          "Severity": "CRITICAL",
-          "SeveritySource": "nvd",
-          "CVSS": {
-            "nvd": {
-              "V3Score": 9.8,
-              "V3Vector": "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-            }
-          },
-          "Title": "CVE-2019-0708: BlueKeep: A remote code execution vulnerability exists in Re...",
-          "Description": "BlueKeep: A remote code execution vulnerability exists in Remote Desktop Services \u2013 formerly known as Terminal Services \u2013 when an unauthenticated attacker connects using RDP.",
-          "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2019-0708",
-            "https://portal.msrc.microsoft.com/en-US/security-guidance/advisory/CVE-2019-0708",
-            "https://github.com/rapid7/metasploit-framework/pull/12283"
-          ],
-          "Port": null,
+          "Port": 3389,
           "InstanceID": "i-j1k2l3",
           "IP": "172.16.10.17"
         }
@@ -266,64 +182,34 @@
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 9.8,
-              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+              "V3Score": 9.8
             }
           },
-          "Title": "CVE-2022-26134: Atlassian Confluence Server and Data Center OGNL injection v...",
-          "Description": "Atlassian Confluence Server and Data Center OGNL injection vulnerability allows unauthenticated remote code execution.",
+          "Title": "CVE-2022-26134: Confluence RCE",
+          "Description": "Confluence OGNL injection vulnerability.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2022-26134",
-            "https://confluence.atlassian.com/doc/confluence-security-advisory-2022-06-02-1130377146.html",
-            "https://github.com/jbaines-r7/through_the_wire"
+            "https://nvd.nist.gov/vuln/detail/CVE-2022-26134"
           ],
           "Port": null,
           "InstanceID": null,
           "IP": "172.16.10.18"
         },
         {
-          "VulnerabilityID": "CVE-2022-26134",
+          "VulnerabilityID": "CVE-2021-26084",
           "PkgName": "confluence",
           "InstalledVersion": "7.13.0",
-          "FixedVersion": "7.13.7",
+          "FixedVersion": "7.13.6",
           "Severity": "CRITICAL",
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 9.8,
-              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+              "V3Score": 9.8
             }
           },
-          "Title": "CVE-2022-26134: Atlassian Confluence Server and Data Center OGNL injection v...",
-          "Description": "Atlassian Confluence Server and Data Center OGNL injection vulnerability allows unauthenticated remote code execution.",
+          "Title": "CVE-2021-26084: Confluence OGNL injection",
+          "Description": "Confluence unauthenticated RCE.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2022-26134",
-            "https://confluence.atlassian.com/doc/confluence-security-advisory-2022-06-02-1130377146.html",
-            "https://github.com/jbaines-r7/through_the_wire"
-          ],
-          "Port": null,
-          "InstanceID": null,
-          "IP": "172.16.10.18"
-        },
-        {
-          "VulnerabilityID": "CVE-2022-26134",
-          "PkgName": "confluence",
-          "InstalledVersion": "7.13.0",
-          "FixedVersion": "7.13.7",
-          "Severity": "CRITICAL",
-          "SeveritySource": "nvd",
-          "CVSS": {
-            "nvd": {
-              "V3Score": 9.8,
-              "V3Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-            }
-          },
-          "Title": "CVE-2022-26134: Atlassian Confluence Server and Data Center OGNL injection v...",
-          "Description": "Atlassian Confluence Server and Data Center OGNL injection vulnerability allows unauthenticated remote code execution.",
-          "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2022-26134",
-            "https://confluence.atlassian.com/doc/confluence-security-advisory-2022-06-02-1130377146.html",
-            "https://github.com/jbaines-r7/through_the_wire"
+            "https://nvd.nist.gov/vuln/detail/CVE-2021-26084"
           ],
           "Port": null,
           "InstanceID": null,
@@ -348,64 +234,34 @@
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 7.5,
-              "V3Vector": "CVSS:2.0/AV:N/AC:L/Au:N/C:P/I:N/A:N"
+              "V3Score": 7.5
             }
           },
-          "Title": "CVE-2014-0160: Heartbleed: The TLS and DTLS implementations in OpenSSL do n...",
-          "Description": "Heartbleed: The TLS and DTLS implementations in OpenSSL do not properly handle Heartbeat Extension packets allowing remote attackers to obtain sensitive information from process memory.",
+          "Title": "CVE-2014-0160: Heartbleed",
+          "Description": "OpenSSL heartbeat information disclosure.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2014-0160",
-            "https://www.openssl.org/news/secadv/20140407.txt",
-            "https://heartbleed.com"
+            "https://nvd.nist.gov/vuln/detail/CVE-2014-0160"
           ],
           "Port": 3000,
           "InstanceID": null,
           "IP": "172.16.10.19"
         },
         {
-          "VulnerabilityID": "CVE-2014-0160",
+          "VulnerabilityID": "CVE-2022-0778",
           "PkgName": "openssl",
           "InstalledVersion": "1.0.1f",
-          "FixedVersion": "1.0.1g",
+          "FixedVersion": "1.1.1n",
           "Severity": "HIGH",
           "SeveritySource": "nvd",
           "CVSS": {
             "nvd": {
-              "V3Score": 7.5,
-              "V3Vector": "CVSS:2.0/AV:N/AC:L/Au:N/C:P/I:N/A:N"
+              "V3Score": 7.5
             }
           },
-          "Title": "CVE-2014-0160: Heartbleed: The TLS and DTLS implementations in OpenSSL do n...",
-          "Description": "Heartbleed: The TLS and DTLS implementations in OpenSSL do not properly handle Heartbeat Extension packets allowing remote attackers to obtain sensitive information from process memory.",
+          "Title": "CVE-2022-0778: OpenSSL infinite loop",
+          "Description": "OpenSSL certificate parsing vulnerability.",
           "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2014-0160",
-            "https://www.openssl.org/news/secadv/20140407.txt",
-            "https://heartbleed.com"
-          ],
-          "Port": 3000,
-          "InstanceID": null,
-          "IP": "172.16.10.19"
-        },
-        {
-          "VulnerabilityID": "CVE-2014-0160",
-          "PkgName": "openssl",
-          "InstalledVersion": "1.0.1f",
-          "FixedVersion": "1.0.1g",
-          "Severity": "HIGH",
-          "SeveritySource": "nvd",
-          "CVSS": {
-            "nvd": {
-              "V3Score": 7.5,
-              "V3Vector": "CVSS:2.0/AV:N/AC:L/Au:N/C:P/I:N/A:N"
-            }
-          },
-          "Title": "CVE-2014-0160: Heartbleed: The TLS and DTLS implementations in OpenSSL do n...",
-          "Description": "Heartbleed: The TLS and DTLS implementations in OpenSSL do not properly handle Heartbeat Extension packets allowing remote attackers to obtain sensitive information from process memory.",
-          "References": [
-            "https://nvd.nist.gov/vuln/detail/CVE-2014-0160",
-            "https://www.openssl.org/news/secadv/20140407.txt",
-            "https://heartbleed.com"
+            "https://nvd.nist.gov/vuln/detail/CVE-2022-0778"
           ],
           "Port": 3000,
           "InstanceID": null,

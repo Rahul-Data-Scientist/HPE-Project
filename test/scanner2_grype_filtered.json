@@ -2,913 +2,173 @@
   "matches": [
     {
       "vulnerability": {
-        "id": "CVE-2021-22986",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2021-22986",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2021-22986",
-          "https://support.f5.com/csp/article/K03009991",
-          "https://github.com/dorkerdevil/CVE-2021-22986-Poc"
-        ],
-        "description": "F5 BIG-IP iControl REST interface has an unauthenticated RCE vulnerability allowing any attacker to execute commands on the affected system.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "16.0.1.1"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
+        "id": "CVE-2021-44228",
+        "severity": "Critical"
       },
       "artifact": {
-        "name": "f5-big-ip",
-        "version": "16.0.0",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/f5-big-ip/16.0.0",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:f5-big-ip:16.0.0:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/f5-big-ip@16.0.0"
+        "name": "log4j-core",
+        "version": "2.14.1",
+        "type": "java-archive"
       },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:f5-big-ip:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 16.0.1.1",
-            "cpes": [
-              "cpe:2.3:a:*:f5-big-ip:16.0.0"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
       "_assetContext": {
-        "ip": "192.168.50.22",
-        "hostname": "prod-rabbitmq.internal",
-        "instanceId": null,
-        "port": 5672
+        "ip": "172.16.10.11",
+        "hostname": "prod-auth-service.internal",
+        "instanceId": "i-a1b2c3",
+        "port": 8443
       }
     },
     {
       "vulnerability": {
-        "id": "CVE-2022-22963",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2022-22963",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-22963",
-          "https://spring.io/security/cve-2022-22963",
-          "https://github.com/hktalent/spring-spel-0day-poc"
-        ],
-        "description": "Spring Cloud Function RCE vulnerability via Spring Expression Language (SpEL) in the routing functionality when using routing functionality.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "3.1.7"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
+        "id": "CVE-2021-45046",
+        "severity": "Critical"
       },
       "artifact": {
-        "name": "spring-cloud-function",
-        "version": "3.1.6",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/spring-cloud-function/3.1.6",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:spring-cloud-function:3.1.6:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/spring-cloud-function@3.1.6"
+        "name": "log4j-core",
+        "version": "2.14.1",
+        "type": "java-archive"
       },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:spring-cloud-function:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 3.1.7",
-            "cpes": [
-              "cpe:2.3:a:*:spring-cloud-function:3.1.6"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
       "_assetContext": {
-        "ip": "192.168.50.23",
-        "hostname": "prod-grafana.internal",
-        "instanceId": "i-s1t2u3",
+        "ip": "172.16.10.11",
+        "hostname": "prod-auth-service.internal",
+        "instanceId": "i-a1b2c3",
+        "port": 8443
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2020-1938",
+        "severity": "Critical"
+      },
+      "artifact": {
+        "name": "tomcat",
+        "version": "9.0.1",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.16",
+        "hostname": "staging-ml-inference.internal",
+        "instanceId": null,
+        "port": 8501
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2021-25329",
+        "severity": "High"
+      },
+      "artifact": {
+        "name": "tomcat",
+        "version": "9.0.1",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.16",
+        "hostname": "staging-ml-inference.internal",
+        "instanceId": null,
+        "port": 8501
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2019-0708",
+        "severity": "Critical"
+      },
+      "artifact": {
+        "name": "rdp-service",
+        "version": "7.0",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.17",
+        "hostname": "staging-feature-store.internal",
+        "instanceId": "i-j1k2l3",
+        "port": 3389
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2019-1181",
+        "severity": "High"
+      },
+      "artifact": {
+        "name": "rdp-service",
+        "version": "7.0",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.17",
+        "hostname": "staging-feature-store.internal",
+        "instanceId": "i-j1k2l3",
+        "port": 3389
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2022-26134",
+        "severity": "Critical"
+      },
+      "artifact": {
+        "name": "confluence",
+        "version": "7.13.0",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.18",
+        "hostname": "test-data-pipeline.internal",
+        "instanceId": null,
+        "port": null
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2021-26084",
+        "severity": "Critical"
+      },
+      "artifact": {
+        "name": "confluence",
+        "version": "7.13.0",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.18",
+        "hostname": "test-data-pipeline.internal",
+        "instanceId": null,
+        "port": null
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2014-0160",
+        "severity": "High"
+      },
+      "artifact": {
+        "name": "openssl",
+        "version": "1.0.1f",
+        "type": "java-archive"
+      },
+      "_assetContext": {
+        "ip": "172.16.10.19",
+        "hostname": "test-notification-svc.internal",
+        "instanceId": null,
         "port": 3000
       }
     },
     {
       "vulnerability": {
-        "id": "CVE-2022-22965",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
-          "https://spring.io/blog/2022/03/31/spring-framework-rce-early-announcement",
-          "https://github.com/craig/SpringCore0day"
-        ],
-        "description": "Spring4Shell: A Spring MVC application running on Java 9+ can be exploited for RCE via data binding functionality with a ClassLoader.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "5.3.18"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
+        "id": "CVE-2022-0778",
+        "severity": "High"
       },
       "artifact": {
-        "name": "spring-webmvc",
-        "version": "5.3.17",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/spring-webmvc/5.3.17",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:spring-webmvc:5.3.17:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/spring-webmvc@5.3.17"
+        "name": "openssl",
+        "version": "1.0.1f",
+        "type": "java-archive"
       },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:spring-webmvc:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 5.3.18",
-            "cpes": [
-              "cpe:2.3:a:*:spring-webmvc:5.3.17"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
       "_assetContext": {
-        "ip": "192.168.50.24",
-        "hostname": "staging-api-server.internal",
+        "ip": "172.16.10.19",
+        "hostname": "test-notification-svc.internal",
         "instanceId": null,
-        "port": 8080
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2023-44487",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
-        "namespace": "nvd:cpe",
-        "severity": "High",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
-          "https://nginx.org/en/CHANGES",
-          "https://www.cisa.gov/news-events/alerts/2023/10/10/http2-rapid-reset-vulnerability-cve-2023-44487"
-        ],
-        "description": "HTTP/2 Rapid Reset Attack: Attackers can send a stream of requests and immediately cancel them, overwhelming the server and causing denial of service.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
-            "metrics": {
-              "baseScore": 7.5,
-              "exploitabilityScore": 3.0,
-              "impactScore": 4.5
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "1.25.3"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "nginx",
-        "version": "1.23.3",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/nginx/1.23.3",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:nginx:1.23.3:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/nginx@1.23.3"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:nginx:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 1.25.3",
-            "cpes": [
-              "cpe:2.3:a:*:nginx:1.23.3"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.26",
-        "hostname": "test-frontend-web.internal",
-        "instanceId": null,
-        "port": 3001
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2021-22986",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2021-22986",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2021-22986",
-          "https://support.f5.com/csp/article/K03009991",
-          "https://github.com/dorkerdevil/CVE-2021-22986-Poc"
-        ],
-        "description": "F5 BIG-IP iControl REST interface has an unauthenticated RCE vulnerability allowing any attacker to execute commands on the affected system.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "16.0.1.1"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "f5-big-ip",
-        "version": "16.0.0",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/f5-big-ip/16.0.0",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:f5-big-ip:16.0.0:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/f5-big-ip@16.0.0"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:f5-big-ip:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 16.0.1.1",
-            "cpes": [
-              "cpe:2.3:a:*:f5-big-ip:16.0.0"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.22",
-        "hostname": "prod-rabbitmq.internal",
-        "instanceId": null,
-        "port": 5672
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2022-22963",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2022-22963",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-22963",
-          "https://spring.io/security/cve-2022-22963",
-          "https://github.com/hktalent/spring-spel-0day-poc"
-        ],
-        "description": "Spring Cloud Function RCE vulnerability via Spring Expression Language (SpEL) in the routing functionality when using routing functionality.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "3.1.7"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "spring-cloud-function",
-        "version": "3.1.6",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/spring-cloud-function/3.1.6",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:spring-cloud-function:3.1.6:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/spring-cloud-function@3.1.6"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:spring-cloud-function:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 3.1.7",
-            "cpes": [
-              "cpe:2.3:a:*:spring-cloud-function:3.1.6"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.23",
-        "hostname": "prod-grafana.internal",
-        "instanceId": "i-s1t2u3",
         "port": 3000
       }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2022-22965",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
-          "https://spring.io/blog/2022/03/31/spring-framework-rce-early-announcement",
-          "https://github.com/craig/SpringCore0day"
-        ],
-        "description": "Spring4Shell: A Spring MVC application running on Java 9+ can be exploited for RCE via data binding functionality with a ClassLoader.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "5.3.18"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "spring-webmvc",
-        "version": "5.3.17",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/spring-webmvc/5.3.17",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:spring-webmvc:5.3.17:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/spring-webmvc@5.3.17"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:spring-webmvc:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 5.3.18",
-            "cpes": [
-              "cpe:2.3:a:*:spring-webmvc:5.3.17"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.24",
-        "hostname": "staging-api-server.internal",
-        "instanceId": null,
-        "port": 8080
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2023-44487",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
-        "namespace": "nvd:cpe",
-        "severity": "High",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
-          "https://nginx.org/en/CHANGES",
-          "https://www.cisa.gov/news-events/alerts/2023/10/10/http2-rapid-reset-vulnerability-cve-2023-44487"
-        ],
-        "description": "HTTP/2 Rapid Reset Attack: Attackers can send a stream of requests and immediately cancel them, overwhelming the server and causing denial of service.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
-            "metrics": {
-              "baseScore": 7.5,
-              "exploitabilityScore": 3.0,
-              "impactScore": 4.5
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "1.25.3"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "nginx",
-        "version": "1.23.3",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/nginx/1.23.3",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:nginx:1.23.3:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/nginx@1.23.3"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:nginx:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 1.25.3",
-            "cpes": [
-              "cpe:2.3:a:*:nginx:1.23.3"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.26",
-        "hostname": "test-frontend-web.internal",
-        "instanceId": null,
-        "port": 3001
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2021-22986",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2021-22986",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2021-22986",
-          "https://support.f5.com/csp/article/K03009991",
-          "https://github.com/dorkerdevil/CVE-2021-22986-Poc"
-        ],
-        "description": "F5 BIG-IP iControl REST interface has an unauthenticated RCE vulnerability allowing any attacker to execute commands on the affected system.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "16.0.1.1"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "f5-big-ip",
-        "version": "16.0.0",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/f5-big-ip/16.0.0",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:f5-big-ip:16.0.0:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/f5-big-ip@16.0.0"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:f5-big-ip:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 16.0.1.1",
-            "cpes": [
-              "cpe:2.3:a:*:f5-big-ip:16.0.0"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.22",
-        "hostname": "prod-rabbitmq.internal",
-        "instanceId": null,
-        "port": 5672
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2022-22963",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2022-22963",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-22963",
-          "https://spring.io/security/cve-2022-22963",
-          "https://github.com/hktalent/spring-spel-0day-poc"
-        ],
-        "description": "Spring Cloud Function RCE vulnerability via Spring Expression Language (SpEL) in the routing functionality when using routing functionality.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "3.1.7"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "spring-cloud-function",
-        "version": "3.1.6",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/spring-cloud-function/3.1.6",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:spring-cloud-function:3.1.6:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/spring-cloud-function@3.1.6"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:spring-cloud-function:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 3.1.7",
-            "cpes": [
-              "cpe:2.3:a:*:spring-cloud-function:3.1.6"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.23",
-        "hostname": "prod-grafana.internal",
-        "instanceId": "i-s1t2u3",
-        "port": 3000
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2022-22965",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
-        "namespace": "nvd:cpe",
-        "severity": "Critical",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
-          "https://spring.io/blog/2022/03/31/spring-framework-rce-early-announcement",
-          "https://github.com/craig/SpringCore0day"
-        ],
-        "description": "Spring4Shell: A Spring MVC application running on Java 9+ can be exploited for RCE via data binding functionality with a ClassLoader.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-            "metrics": {
-              "baseScore": 9.8,
-              "exploitabilityScore": 3.9,
-              "impactScore": 5.9
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "5.3.18"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "spring-webmvc",
-        "version": "5.3.17",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/spring-webmvc/5.3.17",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:spring-webmvc:5.3.17:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/spring-webmvc@5.3.17"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:spring-webmvc:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 5.3.18",
-            "cpes": [
-              "cpe:2.3:a:*:spring-webmvc:5.3.17"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.24",
-        "hostname": "staging-api-server.internal",
-        "instanceId": null,
-        "port": 8080
-      }
-    },
-    {
-      "vulnerability": {
-        "id": "CVE-2023-44487",
-        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
-        "namespace": "nvd:cpe",
-        "severity": "High",
-        "urls": [
-          "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
-          "https://nginx.org/en/CHANGES",
-          "https://www.cisa.gov/news-events/alerts/2023/10/10/http2-rapid-reset-vulnerability-cve-2023-44487"
-        ],
-        "description": "HTTP/2 Rapid Reset Attack: Attackers can send a stream of requests and immediately cancel them, overwhelming the server and causing denial of service.",
-        "cvss": [
-          {
-            "version": "3.1",
-            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
-            "metrics": {
-              "baseScore": 7.5,
-              "exploitabilityScore": 3.0,
-              "impactScore": 4.5
-            },
-            "vendorMetadata": {}
-          }
-        ],
-        "fix": {
-          "versions": [
-            "1.25.3"
-          ],
-          "state": "fixed"
-        },
-        "advisories": []
-      },
-      "artifact": {
-        "name": "nginx",
-        "version": "1.23.3",
-        "type": "java-archive",
-        "locations": [
-          {
-            "realPath": "/app/nginx/1.23.3",
-            "layerID": "sha256:abc123"
-          }
-        ],
-        "language": "javascript",
-        "cpes": [
-          "cpe:2.3:a:*:nginx:1.23.3:*:*:*:*:*:*:*"
-        ],
-        "purl": "pkg:pypi/nginx@1.23.3"
-      },
-      "matchDetails": [
-        {
-          "type": "cpe-match",
-          "matcher": "python-matcher",
-          "searchedBy": {
-            "namespace": "nvd:cpe",
-            "cpes": [
-              "cpe:2.3:a:*:nginx:*"
-            ]
-          },
-          "found": {
-            "versionConstraint": "< 1.25.3",
-            "cpes": [
-              "cpe:2.3:a:*:nginx:1.23.3"
-            ]
-          }
-        }
-      ],
-      "relatedVulnerabilities": [],
-      "_assetContext": {
-        "ip": "192.168.50.26",
-        "hostname": "test-frontend-web.internal",
-        "instanceId": null,
-        "port": 3001
-      }
     }
-  ],
-  "source": {
-    "type": "image",
-    "target": {
-      "userInput": "vulnerability-scan:latest",
-      "imageID": "sha256:deadbeef001"
-    }
-  },
-  "distro": {
-    "name": "ubuntu",
-    "version": "22.04",
-    "idLike": "debian"
-  },
-  "descriptor": {
-    "name": "grype",
-    "version": "0.73.4",
-    "configuration": {
-      "output": [
-        "json"
-      ],
-      "scope": "all-layers"
-    }
-  }
+  ]
 }
