@@ -9,6 +9,7 @@ backend/.env
 
 backend/__pycache__/
 backend/agents/__pycache__/
+backend/lib/__pycache__/
 backend/state_db.sqlite
 frontend/node_modules/
 frontend/.next/
