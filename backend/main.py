@@ -846,7 +846,15 @@ async def get_dashboard_data(request: Request):
             total_solved = int(kpi_row['total_solved'] or 0)
             pending_vulns = int(kpi_row['pending_vulns'] or 0)
             total_vulns = int(kpi_row['total_vulns'] or 0)
-            success_rate = round((total_solved / total_vulns) * 100, 1) if total_vulns > 0 else 0
+            success_rate = (
+                round((total_solved / total_vulns) * 100, 1)
+                if total_vulns > 0 else 0
+            )
+
+            avg_tokens = (
+                int(kpi_row['total_tokens'] or 0) / total_solved
+                if total_solved > 0 else 0
+            )
 
             severities_rows = await conn.fetch("SELECT score FROM vulnerabilities_history ")
             severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
@@ -891,6 +899,7 @@ async def get_dashboard_data(request: Request):
                     "status": "Resolved" if r['resolved'] else "Unresolved",
                     "time": timestamp.strftime('%H:%M %p') if timestamp else "N/A"
                 })
+            
 
             return {
                 "kpis": {
@@ -898,7 +907,7 @@ async def get_dashboard_data(request: Request):
                     "avg_mttr": format_mttr(kpi_row['raw_avg_mttr']),
                     "total_vulns": total_vulns,
                     "total_solved": total_solved,
-                    "total_tokens": int(kpi_row['total_tokens'])/total_solved,
+                    "total_tokens": avg_tokens,
                     "success_rate": success_rate,
                     "pending_vulns": pending_vulns
                 },
