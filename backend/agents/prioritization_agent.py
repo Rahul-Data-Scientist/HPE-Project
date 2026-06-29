@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import Table, Column, String, Float, Integer, MetaData, text, DateTime
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from .db_connection import get_async_db_session, engine
+from sqlalchemy.dialects.postgresql import UUID
 
 # =========================
 # TABLE SCHEMA
@@ -14,7 +15,7 @@ from .db_connection import get_async_db_session, engine
 metadata = MetaData()
 asset_vulnerabilities_table = Table(
     "asset_vulnerabilities", metadata,
-    Column("asset_id", String(255), primary_key=True),
+    Column("asset_id", UUID(as_uuid=False), primary_key=True),
     Column("vuln_id", String(255), primary_key=True),
     Column("fix_available", Integer, nullable=False, default=0),
     Column("first_seen", DateTime),
@@ -38,13 +39,18 @@ def determine_priority_level(score: float) -> str:
     else:
         return "CRITICAL"
 
-def parse_date(date_str) -> datetime:
-    """Safely parse mixed date strings into datetime objects."""
+def parse_date(date_str):
     if pd.isna(date_str) or not date_str:
         return None
     try:
-        # Use pandas to loosely parse, returning python datetime
-        return pd.to_datetime(date_str, format="mixed", utc=True).to_pydatetime()
+        dt = pd.to_datetime(
+            date_str,
+            format="mixed",
+            utc=True
+        ).to_pydatetime()
+
+        return dt.replace(tzinfo=None)
+
     except Exception:
         return None
 
