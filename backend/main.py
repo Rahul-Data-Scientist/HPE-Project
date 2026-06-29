@@ -3,7 +3,7 @@ import json
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
-
+import os
 import aiofiles
 import aiosqlite
 from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, UploadFile, File
@@ -141,8 +141,8 @@ async def process_single_task():
         # Prepare state for the remediation agent
         initial_state = {
             "issue_description": str(task_data),
-            "repo_owner": task_data.get("repo_owner", "Rahul-Data-Scientist"), # Fallback
-            "repo_name": task_data.get("repo_name", "vulnerability-remediation"), # Fallback
+            "repo_owner": os.getenv("DEFAULT_REPO_OWNER", "Rahul-Data-Scientist"), # Fallback
+            "repo_name": os.getenv("DEFAULT_REPO_NAME", "vulnerability-remediation"), # Fallback
             "messages": []
         }
         
