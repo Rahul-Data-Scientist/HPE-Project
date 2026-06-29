@@ -1,51 +1,12 @@
 from .asset_criticality_agent import criticality_graph
 # %% [markdown]
-# # Agent 1 — Asset Lookup Agent
+# # Agent 1 — Asset Lookup Agent (Asynchronous Variant)
 # 
 # **Role in pipeline:** Sits right after Normalization. Receives `working.csv`, resolves every asset against the DB using priority-ordered matching (instance_id → hostname → IP), enriches the CSV with existing asset data, generates UUIDs for new ones, and hands off to Agent 2 (Asset Criticality).
-# 
-# ### What this agent does
-# 1. Read `working.csv` → extract unique assets
-# 2. Priority DB lookup: instance_id first, then hostname, then IP
-# 3. For **existing** assets → fetch all fields, write into CSV
-# 4. For **new** assets → generate UUID, insert skeleton row (`ON CONFLICT DO NOTHING`)
-# 5. Batch upsert `last_seen` (+ `first_seen` for new) at the end
-# 6. Save enriched CSV → hand `state` to Agent 2
-
-# ============================================================================
-# Integration Notes
-#
-# Import:
-#
-#     from backend.agents.asset_lookup_agent import asset_lookup_graph
-#
-# Running:
-#
-#     asset_lookup_graph.invoke(initial_state)
-#
-# Asset Lookup Agent internally invokes Asset Criticality Agent.
-#
-# Therefore importing/running Asset Lookup Agent automatically executes:
-#
-#     Asset Lookup
-#         ↓
-#     Asset Criticality
-#
-# No additional node for Asset Criticality is required in the parent flow.
-#
-# To append another agent, add a new node after call_criticality_agent:
-#
-#     call_criticality_agent
-#             ↓
-#     call_next_agent
-#             ↓
-#            END
-#
-# ============================================================================
 
 # %%
 # ── Imports ───────────────────────────────────────────────────────────────
-import os, uuid, json, logging, time
+import os, uuid, json, logging, time, asyncio
 from datetime import datetime, timezone
 from typing import TypedDict, Optional
 
@@ -62,13 +23,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("asset_lookup")
 
-# 1. Get the absolute path of the file you are running right now (asset_lookup_agent.py)
 CURRENT_FILE = Path(__file__).resolve()
-
-# 2. Go up one level to reach the 'backend' root directory
 BACKEND_DIR = CURRENT_FILE.parent.parent 
-
-# 3. Explicitly target the CSV file inside backend/normalized_output/
 WORKING_CSV_PATH = BACKEND_DIR / "normalized_output" / "working.csv"
 
 
@@ -81,11 +37,6 @@ _TRANSIENT_ERRORS = (psycopg2.OperationalError, ConnectionError, TimeoutError)
 
 
 def retry(fn, *args, **kwargs):
-    """
-    Call fn(*args, **kwargs) up to _RETRY_ATTEMPTS times.
-    Retries only on transient infrastructure errors.
-    Raises on the last failure.
-    """
     last_exc = None
     for attempt in range(1, _RETRY_ATTEMPTS + 1):
         try:
@@ -116,25 +67,23 @@ def _connect():
 
 
 def get_conn():
-    """ a DB connection with retry on transient failures."""
     return retry(_connect)
 
 
 # %%
 # ── LangGraph state ───────────────────────────────────────────────────────
 class AssetLookupState(TypedDict):
-    working_csv: str          # path to working.csv
+    working_csv: str          
     status:      str          # running | done | error
     error:       Optional[str]
-    new_count:   int          # how many new assets were created
-    existing_count: int       # how many existing assets were found
+    new_count:   int          
+    existing_count: int       
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
 # DB REPOSITORY  –  all SQL lives here, nowhere else
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Asset columns we want to pull back from the DB
 _ASSET_COLS = [
     "asset_id", "ip_address", "hostname", "instance_id",
     "inferred_role", "exposure_score", "environment", "cloud_type",
@@ -151,7 +100,6 @@ def _rows_to_dicts(cursor) -> list[dict]:
 # ── Priority lookup functions ───────────────────────────────────
 
 def lookup_by_instance_ids(conn, ids: list[str]) -> list[dict]:
-    """Fetch assets whose instance_id matches any in *ids*."""
     if not ids:
         return []
     with conn.cursor() as cur:
@@ -164,7 +112,6 @@ def lookup_by_instance_ids(conn, ids: list[str]) -> list[dict]:
 
 
 def lookup_by_hostnames(conn, hostnames: list[str]) -> list[dict]:
-    """Fetch assets whose hostname matches any in *hostnames*."""
     if not hostnames:
         return []
     with conn.cursor() as cur:
@@ -177,7 +124,6 @@ def lookup_by_hostnames(conn, hostnames: list[str]) -> list[dict]:
 
 
 def lookup_by_ips(conn, ips: list[str]) -> list[dict]:
-    """Fetch assets whose ip_address matches any in *ips*."""
     if not ips:
         return []
     with conn.cursor() as cur:
@@ -192,10 +138,6 @@ def lookup_by_ips(conn, ips: list[str]) -> list[dict]:
 # ── Skeleton insert───────────────────
 
 def insert_skeleton_assets(conn, rows: list[dict]) -> None:
-    """
-    Insert one at a time so each row hits the right conflict index.
-    ON CONFLICT DO NOTHING fires if instance_id, hostname, OR ip already exists.
-    """
     if not rows:
         return
     sql = """
@@ -211,7 +153,6 @@ def insert_skeleton_assets(conn, rows: list[dict]) -> None:
     conn.commit()
 
 
-# fetch actual asset ids from db
 def fetch_actual_asset_ids(conn, skeleton_rows: list[dict]) -> dict:
     actual_map = {}
     with conn.cursor() as cur:
@@ -232,20 +173,14 @@ def fetch_actual_asset_ids(conn, skeleton_rows: list[dict]) -> dict:
                 
             result = cur.fetchone()
             if result:
-                # Key must match what _row_key() produces in assign_uuids_to_new
                 key = (iid or "", hn or "", ip or "")
                 actual_map[key] = str(result[0])
     return actual_map
 
+
 # ── Batch upsert last_seen / first_seen ────────────────────────
 
 def batch_update_seen_timestamps(conn, rows: list[dict]) -> None:
-    """
-    Upsert last_seen for all assets.
-    For existing assets only last_seen is touched.
-    For new assets both first_seen and last_seen were already set on insert,
-    but we still run DO UPDATE to keep the call uniform.
-    """
     if not rows:
         return
     sql = """
@@ -264,39 +199,23 @@ def batch_update_seen_timestamps(conn, rows: list[dict]) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _normalize_ip(ip_str: str) -> str:
-    """Strip prefix notation e.g. '1.2.3.4/32' → '1.2.3.4'"""
     return ip_str.split("/")[0].strip() if ip_str else ip_str
 
+
 def resolve_assets_from_db(conn, unique_assets: pd.DataFrame) -> dict:
-    """
-    Given a dataframe of unique assets (one row per asset),
-    return a dict keyed by a stable CSV-side identifier mapping to
-    the DB row (or None if not found).
-
-    Priority: instance_id → hostname → ip_address
-
-    Returns
-    -------
-    dict of { csv_key -> db_row_dict or None }
-    where csv_key is a tuple (instance_id, hostname, ip) from the CSV.
-    """
-
     def _val(row, col):
         v = row.get(col, None)
         return str(v).strip() if v and str(v).strip().lower() not in ("", "none", "nan", "null") else None
 
-    # --- collect lookup lists ---
     instance_ids = [_val(r, "instance_id") for _, r in unique_assets.iterrows() if _val(r, "instance_id")]
     hostnames    = [_val(r, "hostname")    for _, r in unique_assets.iterrows() if _val(r, "hostname")]
-    ips = [_normalize_ip(_val(r, "ip")) for _, r in unique_assets.iterrows() if _val(r, "ip")]
+    ips          = [_normalize_ip(_val(r, "ip")) for _, r in unique_assets.iterrows() if _val(r, "ip")]
 
-    # --- batch fetch ---
     by_instance = {r["instance_id"]: r for r in lookup_by_instance_ids(conn, instance_ids) if r.get("instance_id")}
     by_hostname  = {r["hostname"]   : r for r in lookup_by_hostnames(conn, hostnames)       if r.get("hostname")}
-    by_ip        = {r["ip_address"].split("/")[0].strip() : r for r in lookup_by_ips(conn, ips)                   if r.get("ip_address")}
+    by_ip        = {r["ip_address"].split("/")[0].strip() : r for r in lookup_by_ips(conn, ips) if r.get("ip_address")}
 
-    # --- per-row resolution (priority order) ---
-    resolution = {}   # csv_index -> db_row or None
+    resolution = {}   
     for idx, row in unique_assets.iterrows():
         iid = _val(row, "instance_id")
         hn  = _val(row, "hostname")
@@ -309,48 +228,37 @@ def resolve_assets_from_db(conn, unique_assets: pd.DataFrame) -> dict:
         elif ip and ip in by_ip:
             resolution[idx] = by_ip[ip]
         else:
-            resolution[idx] = None   # brand-new asset
+            resolution[idx] = None   
 
     return resolution
 
 # %%
-# Helper Cleaner
 def clean(v):
     if pd.isna(v):
         return None
-
     v = str(v).strip()
-
     if v.lower() in ("", "nan", "none", "null"):
         return None
-
     return v
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# NODE 1 — load_csv
-# Read working.csv and do basic validation
+# NODE 1 — load_csv (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def load_csv(state: AssetLookupState) -> AssetLookupState:
+async def load_csv(state: AssetLookupState) -> AssetLookupState:
     _csv_cache.clear()
     log.info("[load_csv] Reading %s", state["working_csv"])
     try:
-        df = pd.read_csv(state["working_csv"])
+        # Offloading blocking file I/O read operation to pool executor
+        df = await asyncio.to_thread(pd.read_csv, state["working_csv"])
         log.info("  → %d rows, %d columns", len(df), len(df.columns))
 
-        # Normalise column names to lowercase stripped
         df.columns = [c.strip().lower() for c in df.columns]
         
-         # ==========================================================
-        # Remove rows with NO asset identity
-        # ==========================================================
-
         for col in ["instance_id", "hostname", "ip"]:
             if col not in df.columns:
                 df[col] = pd.NA
-
-        before_count = len(df)
 
         invalid_assets = df[
             df["instance_id"].isna()
@@ -362,17 +270,16 @@ def load_csv(state: AssetLookupState) -> AssetLookupState:
             REJECTED_DIR = BACKEND_DIR / "rejected_records"
             REJECTED_DIR.mkdir(parents=True, exist_ok=True)
 
-            invalid_assets.to_csv(
+            # Offloading blocking reject write file task
+            await asyncio.to_thread(
+                invalid_assets.to_csv,
                 str(REJECTED_DIR / "rejected_asset_records.csv"),
                 mode="a",
                 header=not (REJECTED_DIR / "rejected_asset_records.csv").exists(),
                 index=False
             )
 
-            log.warning(
-                "[load_csv] Removed %d rows with no asset identifiers",
-                len(invalid_assets)
-            )
+            log.warning("[load_csv] Removed %d rows with no asset identifiers", len(invalid_assets))
 
         df = df[
             ~(
@@ -382,17 +289,12 @@ def load_csv(state: AssetLookupState) -> AssetLookupState:
             )
         ].copy()
 
-        log.info(
-            "[load_csv] %d valid rows remain",
-            len(df)
-        )
+        log.info("[load_csv] %d valid rows remain", len(df))
 
-        # The CSV must have at least one of these three identity columns
         id_cols = ["instance_id", "hostname", "ip"]
         if not any(c in df.columns for c in id_cols):
             raise ValueError(f"CSV has none of the required identity columns: {id_cols}")
 
-        # Persist df in state via a side-channel (module-level cache)
         _csv_cache["df"] = df
         return {**state, "status": "running"}
 
@@ -401,26 +303,23 @@ def load_csv(state: AssetLookupState) -> AssetLookupState:
         return {**state, "status": "error", "error": str(e)}
 
 
-_csv_cache: dict = {}  # lightweight in-process cache shared across nodes
+_csv_cache: dict = {}  
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# NODE 2 — db_lookup_and_split
-# Priority-ordered DB lookup → split into existing vs new
+# NODE 2 — db_lookup_and_split (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def db_lookup_and_split(state: AssetLookupState) -> AssetLookupState:
+async def db_lookup_and_split(state: AssetLookupState) -> AssetLookupState:
     if state["status"] == "error":
         return state
 
     log.info("[db_lookup_and_split] Starting priority-ordered DB lookup")
     df = _csv_cache["df"]
 
-    # Build unique-asset slice
     id_cols_present = [c for c in ["instance_id", "hostname", "ip"] if c in df.columns]
     unique_assets = df[id_cols_present].drop_duplicates().reset_index(drop=True)
 
-    # ── VALIDATION: skip assets with no identifiers ───────────────────────
     valid_rows = []
     for idx, row in unique_assets.iterrows():
         hostname    = clean(row.get("hostname"))
@@ -431,14 +330,18 @@ def db_lookup_and_split(state: AssetLookupState) -> AssetLookupState:
             continue
         valid_rows.append(idx)
     unique_assets = unique_assets.loc[valid_rows].reset_index(drop=True)
-    # ─────────────────────────────────────────────────────────────────────
 
     log.info("  → %d unique assets from %d rows", len(unique_assets), len(df))
 
-    try:
-        conn = get_conn()   # retry wrapper handles transient failures
-        resolution = resolve_assets_from_db(conn, unique_assets)
+    def _do_lookup():
+        conn = get_conn()   
+        res = resolve_assets_from_db(conn, unique_assets)
         conn.close()
+        return res
+
+    try:
+        # Offloading blocking network connection and priority mapping logic out of main thread
+        resolution = await asyncio.to_thread(_do_lookup)
     except Exception as e:
         log.error("[db_lookup_and_split] DB error: %s", e)
         return {**state, "status": "error", "error": str(e)}
@@ -461,12 +364,9 @@ def db_lookup_and_split(state: AssetLookupState) -> AssetLookupState:
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# NODE 3 — enrich_existing_in_csv
-# For assets already in DB: pull their criticality/role/exposure etc.
-# into the working CSV so Agent 2 can skip recalculation for them.
+# NODE 3 — enrich_existing_in_csv (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Columns we copy from DB into CSV for existing assets
 _DB_ENRICH_COLS = [
     "asset_id", "inferred_role", "exposure_score", "environment",
     "cloud_type", "dependency_level", "dependency_score", "asset_criticality_score",
@@ -474,7 +374,7 @@ _DB_ENRICH_COLS = [
 ]
 
 
-def enrich_existing_in_csv(state: AssetLookupState) -> AssetLookupState:
+async def enrich_existing_in_csv(state: AssetLookupState) -> AssetLookupState:
     if state["status"] == "error":
         return state
     
@@ -482,24 +382,19 @@ def enrich_existing_in_csv(state: AssetLookupState) -> AssetLookupState:
     df       = _csv_cache["df"]
     now = datetime.now(timezone.utc).isoformat()
     
-    # Ensure the enrichment columns exist in df
     for col in _DB_ENRICH_COLS:
         if col not in df.columns:
             df[col] = None
-
         df[col] = df[col].astype("object")
 
     log.info("[enrich_existing_in_csv] Enriching %d existing assets in CSV", len(existing))
 
-
-    # Build a lookup: identity value → db row
     db_by_asset_id: dict = {}
     for item in existing:
         db_row = item["db"]
         db_by_asset_id[db_row["asset_id"]] = db_row
 
-    # Also build a map from csv identity → asset_id
-    id_to_asset_id: dict = {}  # (iid, hn, ip) -> asset_id
+    id_to_asset_id: dict = {}  
     for item in existing:
         db = item["db"]
         csv = item["csv"]
@@ -533,13 +428,13 @@ def enrich_existing_in_csv(state: AssetLookupState) -> AssetLookupState:
     _csv_cache["df"] = df
     return state
 
+
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# NODE 4 — assign_uuids_to_new
-# Generate UUIDs for new assets and insert skeleton rows
+# NODE 4 — assign_uuids_to_new (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
+async def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
     if state["status"] == "error":
         return state
 
@@ -568,7 +463,6 @@ def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
             log.warning("[assign_uuids_to_new] Skipping new asset with no identity fields")
             continue
 
-        # KEY: (iid, hn, ip) — all three using the CSV "ip" value
         key = (iid or "", hn or "", ip or "")
         new_uuid_map[key] = new_id
 
@@ -576,7 +470,7 @@ def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
             "asset_id":    new_id,
             "instance_id": iid,
             "hostname":    hn,
-            "ip_address":  ip,   # DB column name for the INSERT
+            "ip_address":  ip,   
             "first_seen":  now,
             "last_seen":   now,
         })
@@ -589,7 +483,8 @@ def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
                 actual_map = fetch_actual_asset_ids(conn, skeleton_rows)
                 conn.close()
                 return actual_map
-            actual_uuid_map = retry(_do_insert)
+            # Offloading blocking skeleton insertion transaction loop to pool thread
+            actual_uuid_map = await asyncio.to_thread(retry, _do_insert)
             log.info("  → Inserted/verified %d skeleton rows in DB", len(skeleton_rows))
         except Exception as e:
             log.error("[assign_uuids_to_new] DB insert error after retries: %s", e)
@@ -597,7 +492,6 @@ def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
     else:
         actual_uuid_map = {}
 
-    # _row_key must produce (iid, hn, ip) using the CSV "ip" column — same as key above
     def _row_key(row):
         return (
             clean(row.get("instance_id")) or "",
@@ -620,18 +514,16 @@ def assign_uuids_to_new(state: AssetLookupState) -> AssetLookupState:
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# NODE 5 — update_seen_timestamps
-# One final DB batch: last_seen for all, first_seen for new
+# NODE 5 — update_seen_timestamps (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def update_seen_timestamps(state: AssetLookupState) -> AssetLookupState:
+async def update_seen_timestamps(state: AssetLookupState) -> AssetLookupState:
     if state["status"] == "error":
         return state
 
     df  = _csv_cache["df"]
     now = datetime.now(timezone.utc).isoformat()
 
-    # Collect all asset_ids that now have a resolved UUID
     seen_rows = []
     for asset_id in df["asset_id"].dropna().unique():
         seen_rows.append({"asset_id": str(asset_id), "last_seen": now})
@@ -642,7 +534,8 @@ def update_seen_timestamps(state: AssetLookupState) -> AssetLookupState:
             conn = get_conn()
             batch_update_seen_timestamps(conn, seen_rows)
             conn.close()
-        retry(_do_update)
+        # Offloading final database timestamp update out of main thread loop
+        await asyncio.to_thread(retry, _do_update)
         log.info("  → Done")
     except Exception as e:
         log.error("[update_seen_timestamps] Failed after retries: %s", e)
@@ -653,22 +546,21 @@ def update_seen_timestamps(state: AssetLookupState) -> AssetLookupState:
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# NODE 6 — save_csv
-# Persist enriched working.csv and finalise state for Agent 2
+# NODE 6 — save_csv (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def save_csv(state: AssetLookupState) -> AssetLookupState:
+async def save_csv(state: AssetLookupState) -> AssetLookupState:
     if state["status"] == "error":
         return state
 
     df   = _csv_cache["df"]
     path = state["working_csv"]
 
-
     try:
         OUTPUT_DIR = BACKEND_DIR / "normalized_output"
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        df.to_csv(path, index=False)
+        # Offloading blocking disk file writing out of loop
+        await asyncio.to_thread(df.to_csv, path, index=False)
         log.info("[save_csv] Saved %d rows → %s", len(df), path)
     except Exception as e:
         log.error("[save_csv] %s", e)
@@ -677,16 +569,16 @@ def save_csv(state: AssetLookupState) -> AssetLookupState:
     return {**state, "status": "done"}
 
 
-# Node 7 : to call criticality agent
-def call_criticality_agent(state: AssetLookupState) -> AssetLookupState:
-
+# Node 7 : to call criticality agent (ASYNC UPGRADE)
+async def call_criticality_agent(state: AssetLookupState) -> AssetLookupState:
     if state["status"] == "error":
         return state
 
     log.info("[call_criticality_agent] Starting Asset Criticality Agent")
 
     try:
-        result = criticality_graph.invoke({
+        # ASYNC UPGRADE: Using ainvoke to chain to the now async criticality graph
+        result = await criticality_graph.ainvoke({
             "working_csv": state["working_csv"],
             "status": "running",
             "error": None,
@@ -706,7 +598,6 @@ def call_criticality_agent(state: AssetLookupState) -> AssetLookupState:
 
     except Exception as e:
         log.error("[call_criticality_agent] %s", e)
-
         return {
             **state,
             "status": "error",
@@ -725,7 +616,7 @@ def route(state: AssetLookupState) -> str:
 
 # %%
 # ═══════════════════════════════════════════════════════════════════════════
-# BUILD THE GRAPH
+# BUILD THE GRAPH (ASYNC UPGRADE)
 # ═══════════════════════════════════════════════════════════════════════════
 
 builder = StateGraph(AssetLookupState)
@@ -740,40 +631,36 @@ builder.add_node("call_criticality_agent", call_criticality_agent)
 
 builder.set_entry_point("load_csv")
 
-# load_csv → db_lookup_and_split (or stop on error)
 builder.add_conditional_edges(
     "load_csv",
     route,
     {"continue": "db_lookup_and_split", "error_end": END}
 )
 
-# db_lookup_and_split → enrich_existing_in_csv
 builder.add_conditional_edges(
     "db_lookup_and_split",
     route,
     {"continue": "enrich_existing_in_csv", "error_end": END}
 )
 
-# enrich_existing_in_csv → assign_uuids_to_new
 builder.add_conditional_edges(
     "enrich_existing_in_csv",
     route,
     {"continue": "assign_uuids_to_new", "error_end": END}
 )
 
-# assign_uuids_to_new → update_seen_timestamps
 builder.add_conditional_edges(
     "assign_uuids_to_new",
     route,
     {"continue": "update_seen_timestamps", "error_end": END}
 )
 
-# update_seen_timestamps → save_csv
 builder.add_conditional_edges(
     "update_seen_timestamps",
     route,
     {"continue": "save_csv", "error_end": END}
 )
+
 builder.add_conditional_edges(
     "save_csv",
     route,
@@ -790,44 +677,3 @@ builder.add_edge(
 
 asset_lookup_graph = builder.compile()
 print("Graph compiled ✓")
-
-# %%
-# initial_state: AssetLookupState = {
-#     "working_csv":      "backend/normalized_output/working.csv",
-#     "status":           "running",
-#     "error":            None,
-#     "new_count":        0,
-#     "existing_count":   0,
-# }
-
-# final_state = asset_lookup_graph.invoke(initial_state)
-
-# print("\n=== Asset Lookup Agent — Final State ===")
-# print(json.dumps(final_state, indent=2))
-
-# if final_state["status"] == "done":
-#     print(f"\n✅ Success — {final_state['existing_count']} existing + {final_state['new_count']} new assets")
-#     print(f"   CSV enriched and saved → {final_state['working_csv']}")
-#     print("   Hand state to Agent 2 (Asset Criticality Agent)")
-# else:
-#     print(f"\n❌ Error: {final_state.get('error')}")
-
-
-# # ═══════════════════════════════════════════════════════════════════════════
-# # STANDALONE RUN
-# # ═══════════════════════════════════════════════════════════════════════════
-
-# if __name__ == "__main__":
-
-#     initial_state: AssetLookupState = {
-#         "working_csv": str(WORKING_CSV_PATH),
-#         "status": "running",
-#         "error": None,
-#         "new_count": 0,
-#         "existing_count": 0,
-#     }
-
-#     final_state = asset_lookup_graph.invoke(initial_state)
-
-#     print("\n=== Asset Lookup Agent — Final State ===")
-#     print(json.dumps(final_state, indent=2))
