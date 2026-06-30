@@ -127,6 +127,7 @@ Write a Python function `normalize_data(df)` using Pandas that transforms this r
 - **cvss_vector**: String representation of CVSS vector.
 - **description**: Summary of the vulnerability.
 - **references**: MUST BE A LIST of strings. (If source is a comma/newline string, split it).
+- **fixed_version**: The version where the vulnerability is patched/fixed. If not available, use null.
 
 ### CRITICAL CONSTRAINTS:
 1. Handle Missing Columns: If a column needed for the schema doesn't exist in the input, initialize it with `None` or appropriate defaults.
