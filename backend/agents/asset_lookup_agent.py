@@ -318,7 +318,22 @@ async def db_lookup_and_split(state: AssetLookupState) -> AssetLookupState:
     df = _csv_cache["df"]
 
     id_cols_present = [c for c in ["instance_id", "hostname", "ip"] if c in df.columns]
-    unique_assets = df[id_cols_present].drop_duplicates().reset_index(drop=True)
+    # normalize all identity values first
+    unique_assets = df[id_cols_present].copy()
+
+    for col in ["instance_id", "hostname", "ip"]:
+        if col in unique_assets.columns:
+            unique_assets[col] = unique_assets[col].apply(clean)
+
+    # remove exact duplicate asset identities
+    unique_assets = (
+        unique_assets
+        .drop_duplicates(
+            subset=["instance_id", "hostname", "ip"],
+            keep="first"
+        )
+        .reset_index(drop=True)
+    )
 
     valid_rows = []
     for idx, row in unique_assets.iterrows():
