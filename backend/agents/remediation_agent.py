@@ -424,38 +424,45 @@ async def remediation_node(state: AgentState):
         
     return return_payload
 
-async def create_prompt(state: AgentState):
+async def create_prompt(state: AgentState, config: RunnableConfig):
     owner = state["repo_owner"]
     repo = state["repo_name"]
     branch = state["branch_name"]
     fix_desc = state["fix_description"]
     pr_number = state.get("pr_number")
 
-    # Enforce the singular unified file path footprint
-    target_file = state.get("target_file", "scripts.json")
+    # 1. Isolate and sanitize the operational thread_id
+    thread_id = config["configurable"]["thread_id"]
+    sanitized_thread_id = str(thread_id).replace("/", "-").replace("\\", "-").replace(" ", "_")
 
+
+    # 🌟 MODIFIED: Enforce the compound naming convention: payloads/{vuln_id}_{thread_id}.json
+    target_file = f"payloads/{sanitized_thread_id}.json"
+
+    # Assemble the tracking metadata along with the orchestration scripts inside the JSON body
     scripts_payload_json = json.dumps({
+        "thread_id": thread_id,
         "precheck_script": state.get("precheck_script", ""),
         "remediation_script": state.get("modified_file_content", ""),
         "validation_script": state.get("validation_script", "")
     }, indent=2)
 
     if pr_number:
-        print(f"[AGENT] 🛠️ Formulating Git payload to patch unified runbook configuration on branch '{branch}' for PR #{pr_number}...")
+        print(f"[AGENT] 🛠️ Formulating Git payload to patch runtime runbook configuration on branch '{branch}' at '{target_file}' for PR #{pr_number}...")
         prompt = (
             f"Using your GitHub tools, execute the following actions on the repository '{owner}/{repo}':\n\n"
-            f"1. Update the single configuration file named '{target_file}' in the branch '{branch}' with this content exactly:\n"
+            f"1. Update the configuration file named '{target_file}' in the branch '{branch}' with this content exactly:\n"
             f"-----------\n{scripts_payload_json}\n-----------\n"
             f"2. Commit this change to the branch '{branch}'. You must call the appropriate tools sequentially "
             f"to ensure the file is successfully updated in the commit tree. Use the commit message: "
             f"'Refine remediation code and evidence scripts: {fix_desc}'\n"
         )
     else:
-        print(f"[AGENT] 🛠️ Formulating initialization payload for new security branch '{branch}' containing singular configuration layout...")
+        print(f"[AGENT] 🛠️ Formulating initialization payload for new security branch '{branch}' containing isolated configuration layout at '{target_file}'...")
         prompt = (
             f"Using your GitHub tools, execute the following actions sequentially on the repository '{owner}/{repo}':\n\n"
             f"1. Check if a branch named '{branch}' already exists. If not, create the branch named '{branch}' in the repository.\n"
-            f"2. Create or update the single orchestration file named '{target_file}' on branch '{branch}' with this content exactly:\n"
+            f"2. Create or update the isolated orchestration file named '{target_file}' on branch '{branch}' with this content exactly:\n"
             f"-----------\n{scripts_payload_json}\n-----------\n"
             f"3. Commit the file change with a suitable message detailing this security remediation.\n"
             f"4. Create a Pull Request from branch '{branch}' to the default branch.\n\n"

@@ -50,6 +50,8 @@ WAITING_FOR_HUMAN_APPROVAL = "WAITING_FOR_HUMAN_APPROVAL"
 COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 RESUMING = "RESUMING"
+FEEDBACK_RECEIVED = "FEEDBACK_RECEIVED"
+
 # Locate and load the environment variables from .env
 load_dotenv(override=True)
 
@@ -115,10 +117,10 @@ async def get_workflow_state(thread_id: str) -> str | None:
             row = await cursor.fetchone()
     return row[0] if row else None
 
-async def claim_workflow_for_resume(thread_id: str) -> bool:
+async def claim_workflow_for_feedback(thread_id: str) -> bool:
     async with aiosqlite.connect(clean_path, timeout=5.0) as db:
         cursor = await db.execute(
-            "UPDATE workflow_state SET status = 'RESUMING' WHERE thread_id = ? AND status = 'WAITING_FOR_HUMAN_APPROVAL'",
+            "UPDATE workflow_state SET status = 'FEEDBACK_RECEIVED' WHERE thread_id = ? AND status = 'WAITING_FOR_HUMAN_APPROVAL'",
             (thread_id,)
         )
         await db.commit()
@@ -222,7 +224,7 @@ NODE_LOG_MAP = {
 
 async def check_and_run_final_migration():
     async with aiosqlite.connect(clean_path, timeout=5.0) as db:
-        async with db.execute("SELECT count(*) FROM vulnerabilities WHERE status IN ('PENDING', 'IN_PROGRESS', 'WAITING_FOR_APPROVAL', 'RESUMING')") as cursor:
+        async with db.execute("SELECT count(*) FROM vulnerabilities WHERE status IN ('PENDING', 'IN_PROGRESS', 'WAITING_FOR_APPROVAL', 'RESUMING', 'FEEDBACK_RECEIVED')") as cursor:
             active_count = (await cursor.fetchone())[0]
 
         if active_count > 0:
@@ -244,9 +246,13 @@ async def check_and_run_final_migration():
         await printS(f"[SYSTEM] ✅ Auto-Migration Complete: {result['message']}")
         
         async with aiosqlite.connect(clean_path, timeout=5.0) as db:
-            await db.execute("DELETE FROM vulnerabilities")
-            await db.execute("DELETE FROM pr_mappings")
-            await db.execute("DELETE FROM workflow_state")
+            delete_queries = [
+                "DELETE FROM vulnerabilities",
+                "DELETE FROM pr_mappings",
+                "DELETE FROM workflow_state"
+            ]
+            for query in delete_queries:
+                await db.execute(query)
             await db.commit() 
             await db.execute("VACUUM")
             
@@ -259,12 +265,30 @@ async def process_single_task():
     row = []
     async with queue_lock:
         async with aiosqlite.connect(clean_path, timeout=5.0) as db:
-            async with db.execute("SELECT count(*) FROM vulnerabilities WHERE status = 'IN_PROGRESS'") as cursor:
+            # Concurrency Control: Ensure no active agent is running (handles both fresh and resuming processes)
+            async with db.execute("SELECT count(*) FROM vulnerabilities WHERE status IN ('IN_PROGRESS', 'RESUMING')") as cursor:
                 if (await cursor.fetchone())[0] > 0:
                     print("[SYSTEM] An agent is already active. Yielding.")
                     return 
 
-            async with db.execute("SELECT thread_id, data, retry_count, cve_id, score FROM vulnerabilities WHERE status = 'PENDING' ORDER BY score DESC LIMIT 1") as cursor:
+            # PRIORITY 1: Look for paused agents that have received human feedback
+            async with db.execute(
+                "SELECT thread_id, data, retry_count, cve_id, score FROM vulnerabilities WHERE status = 'FEEDBACK_RECEIVED' ORDER BY score DESC LIMIT 1"
+            ) as cursor:
+                row = await cursor.fetchone()
+            
+            if row:
+                thread_id = row[0]
+                await db.execute("UPDATE vulnerabilities SET status = 'RESUMING' WHERE thread_id = ?", (thread_id,))
+                await db.commit()
+                
+                asyncio.create_task(resume_agent_background(thread_id))
+                return
+
+            # PRIORITY 2: Fetch the next brand-new pending vulnerability
+            async with db.execute(
+                "SELECT thread_id, data, retry_count, cve_id, score FROM vulnerabilities WHERE status = 'PENDING' ORDER BY score DESC LIMIT 1"
+            ) as cursor:
                 row = await cursor.fetchone()
                 
         if not row:
@@ -279,7 +303,6 @@ async def process_single_task():
         score = row[4]
          
         task_data = json.loads(raw_data)
-        refc = task_data.get("references", [])[:3]
         
         async with aiosqlite.connect(clean_path, timeout=5.0) as db:
             await db.execute("UPDATE vulnerabilities SET status = 'IN_PROGRESS', error_reason = NULL WHERE thread_id = ?", (thread_id,))
@@ -297,8 +320,8 @@ async def process_single_task():
     try:
         initial_state = {
             "issue_description": str(task_data),
-            "repo_owner": os.getenv("DEFAULT_REPO_OWNER", "Rahul-Data-Scientist"), # Fallback
-            "repo_name": os.getenv("DEFAULT_REPO_NAME", "vulnerability-remediation"), # Fallback
+            "repo_owner": os.getenv("DEFAULT_REPO_OWNER", "Rahul-Data-Scientist"), 
+            "repo_name": os.getenv("DEFAULT_REPO_NAME", "vulnerability-remediation"), 
             "messages": []
         }
         
@@ -327,6 +350,9 @@ async def process_single_task():
                         async with aiosqlite.connect(clean_path, timeout=5.0) as db:
                             await db.execute("UPDATE vulnerabilities SET status = 'WAITING_FOR_APPROVAL' WHERE thread_id = ?", (thread_id,))
                             await db.commit()
+                        
+                        # Unblock the queue immediately so other agents can process while this waits
+                        asyncio.create_task(process_single_task())
                         return 
 
                     if node_name == "github_workflow":
@@ -351,7 +377,6 @@ async def process_single_task():
                 end_time = values.get("end_time")
                 time_taken = values.get("active_execution_time", 0.0)
                 
-                # Note: Change "ci_status" to whatever state key your agent uses to track success/failure!
                 agent_succeeded = values.get("ci_status") == "success" 
 
                 if agent_succeeded:
@@ -361,19 +386,15 @@ async def process_single_task():
                             (cost, token, start_time, end_time, time_taken, thread_id)
                         )
                         await db.commit()
-                    
                     await update_workflow_state(thread_id, COMPLETED)
                     await manager.broadcast({"thread_id": thread_id, "status": "RESOLVED", "log": f"[SYSTEM] 🎉 {thread_id} Resolved."})
-                
                 else:
-                    # 👇 NEW: Handle graceful agent failures (e.g., self-healing failed)
                     async with aiosqlite.connect(clean_path, timeout=5.0) as db:
                         await db.execute(
                             "UPDATE vulnerabilities SET status = 'FAILED', resolved = FALSE, cost = ?, token = ?, start_time = ?, end_time = ?, time_taken = ?, error_reason = 'Agent failed to resolve after self-healing' WHERE thread_id = ?", 
                             (cost, token, start_time, end_time, time_taken, thread_id)
                         )
                         await db.commit()
-                    
                     await update_workflow_state(thread_id, FAILED)
                     await manager.broadcast({
                         "thread_id": thread_id, 
@@ -381,19 +402,11 @@ async def process_single_task():
                         "log": f"[CRITICAL ERROR] ❌ {thread_id} failed to resolve. Marked Jira ticket unresolved."
                     })
                 
-                # async with aiosqlite.connect(clean_path, timeout=5.0) as db:
-                #     await db.execute("UPDATE vulnerabilities SET status = 'RESOLVED', resolved = TRUE, cost = ?, token = ?, start_time = ?, end_time = ?, time_taken = ? WHERE thread_id = ?", (cost, token, start_time, end_time, time_taken, thread_id))
-                #     await db.commit()
-                
-                # await update_workflow_state(thread_id, COMPLETED)
-                # await manager.broadcast({"thread_id": thread_id, "status": "COMPLETED", "log": f"[SYSTEM] 🎉 {thread_id} Resolved."})
-                
                 asyncio.create_task(process_single_task())
             
     except Exception as e:
         error_msg = str(e)
         print(f"[QUEUE ERROR] {error_msg}")
-        
         async with aiosqlite.connect(clean_path, timeout=5.0) as db:
             if retry_count < 2:
                 new_count = retry_count + 1
@@ -416,7 +429,6 @@ async def process_single_task():
                     "status": "FAILED", 
                     "log": f"[CRITICAL ERROR] Failed permanently after 3 attempts. Skipping. Error: {error_msg}"
                 })
-        
         asyncio.create_task(process_single_task())
 
 async def resume_agent_background(thread_id: str):
@@ -456,6 +468,9 @@ async def resume_agent_background(thread_id: str):
                         async with aiosqlite.connect(clean_path, timeout=5.0) as db:
                             await db.execute("UPDATE vulnerabilities SET status = 'WAITING_FOR_APPROVAL' WHERE thread_id = ?", (thread_id,))
                             await db.commit()
+                        
+                        # Free up queue execution context if re-interrupted
+                        asyncio.create_task(process_single_task())
                         return 
                     
                     if node_name == "github_workflow":
@@ -601,7 +616,6 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
                 "log": f"[SYSTEM] 📂 Successfully saved {file.filename} to {UPLOAD_DIR.name}/"
             })
         
-        
         await manager.broadcast({"step": "Parsing", "log": f"[SYSTEM] 📥 Upload received: {len(files)} files. Initiating pipeline..."})
         
         # === AWAIT PARSING AGENT ===
@@ -611,8 +625,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
             "folder_path": "raw_scanner_outputs",
             "parse_code_file_path": "agents/generated_parser_func.py" 
         }
-        # Converted to ainvoke
-        parsed_state = await parsing_graph.ainvoke(parser_inputs)
+        await parsing_graph.ainvoke(parser_inputs)
         await manager.broadcast({"step": "Parsing", "log": "[AGENT] ✅ Parsing Agent successfully extracted raw data."})
         await printS("-----Parsing Complete-----")
         
@@ -622,8 +635,7 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         normalizer_inputs = {
             "folder_path": "parsed_csvs" 
         }
-        # Converted to ainvoke
-        normalize_result_state = await normalizer.ainvoke(normalizer_inputs)
+        await normalizer.ainvoke(normalizer_inputs)
         await manager.broadcast({"step": "Normalization", "log": "[AGENT] ✅ Normalization Agent standardized the vulnerabilities."})
         await printS("-----Normalization Complete-----")
         
@@ -632,7 +644,6 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         CURRENT_DIR = Path(__file__).resolve().parent
         WORKING_CSV_PATH = CURRENT_DIR / "normalized_output" / "working.csv"
         
-        # Converted to await
         await run_remediation_pipeline(WORKING_CSV_PATH)
         
         initial_state = {
@@ -644,21 +655,18 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
         }
 
         await manager.broadcast({"step": "Enrichment", "log": "[AGENT] 🏢 Fetching asset criticality, owner mappings, and history..."})
-        # Converted to ainvoke
-        final_state = await asset_lookup_graph.ainvoke(initial_state)
+        await asset_lookup_graph.ainvoke(initial_state)
         
         # === AWAIT PRIORITIZATION AGENT ===
         await manager.broadcast({"step": "Prioritization", "log": "[AGENT] 📊 Initializing Prioritization Agent to calculate Threat Scores..."})
-        # Converted to await
         await run_prioritization_agent(str(WORKING_CSV_PATH))
         
         await manager.broadcast({"step": "Prioritization", "log": "[AGENT] ✅ Prioritization Completed! Evaluating severity thresholds..."})
         await printS("-----Prioritization Complete-----")
         
-        # Read the file asynchronously without blocking the event loop
         df = await asyncio.to_thread(pd.read_csv, str(WORKING_CSV_PATH))
         df = df.where(pd.notnull(df), None)
-        # df.drop_duplicates(subset = ["vuln_id"], inplace = True)
+        df.drop_duplicates(subset = ["vuln_id", "asset_id"], inplace = True)
         tasks = df.to_dict(orient="records")
         
         if not tasks:
@@ -666,31 +674,27 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
             await manager.broadcast({"log": "[SYSTEM] 🛡️ Pre-processing complete. No actionable vulnerabilities were parsed."})
             return {"status": "success", "queued_items": 0}
 
-        # 1. Sort the tasks by priority score / score (highest to lowest)
         tasks.sort(key=lambda x: float(x.get("priority_score") or x.get("score") or 0.0), reverse=True)
         
-        # 2. Slice the top 10 elements BEFORE saving to the DB queue
         BATCH_LIMIT = 10
         top_tasks = tasks[:BATCH_LIMIT]
             
-        await manager.broadcast({"step": "Prioritization", "log": "[AGENT] ✅ Prioritization Completed! Evaluating severity thresholds..."})
         async with aiosqlite.connect(clean_path, timeout=10.0) as db:
-            for task in tasks: # Fixed: Iterate over top_tasks only
+            for task in tasks: 
                 if "thread_id" not in task or not task["thread_id"]:
                     task["thread_id"] = f"vuln-{uuid.uuid4().hex[:10]}"
                 
                 score = float(task.get("priority_score", task.get("score", 5.0)))
-                asset_id = task.get("asset_id","Unknown");
+                asset_id = task.get("asset_id", "Unknown")
                 cve_id = task.get("vuln_id", task.get("cve_id", asset_id))
                 
-                # Update map keys back to object for JSON payload consistency
                 task["thread_id"] = task["thread_id"]
                 task["vuln_id"] = cve_id
                 task["score"] = score
                 
                 await db.execute(
                     "INSERT OR IGNORE INTO vulnerabilities (thread_id, asset_id, cve_id, score, status, data) VALUES (?, ?, ?, ?, ?,?)",
-                    (task["thread_id"], asset_id ,cve_id, score, PENDING, json.dumps(task))
+                    (task["thread_id"], asset_id, cve_id, score, PENDING, json.dumps(task))
                 )
             await db.commit()
         
@@ -713,10 +717,6 @@ async def handle_csv_upload(files: list[UploadFile] = File(...), background_task
 @app.post("/github-webhook")
 async def github_webhook_listener(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
-    
-    # async with aiofiles.open("github_webhook_payload2.json", "a", encoding="utf-8") as f:
-    #     await f.write(json.dumps(payload, indent=4) + "\n\n")
-
     event_type = request.headers.get("X-GitHub-Event")
     should_continue = False
 
@@ -738,17 +738,22 @@ async def github_webhook_listener(request: Request, background_tasks: Background
         if not thread_id:
             return {"status": "ignored"}
 
-        claimed = await claim_workflow_for_resume(thread_id)
+        # Intercept and transition state into FEEDBACK_RECEIVED queue instead of running it immediately
+        claimed = await claim_workflow_for_feedback(thread_id)
         if not claimed:
-            return {"status": "ignored", "reason": "already_resuming"}
+            return {"status": "ignored", "reason": "already_queued_or_not_waiting"}
+
+        async with aiosqlite.connect(clean_path, timeout=5.0) as db:
+            await db.execute("UPDATE vulnerabilities SET status = 'FEEDBACK_RECEIVED' WHERE thread_id = ?", (thread_id,))
+            await db.commit()
 
         await manager.broadcast({
             "thread_id": thread_id, 
-            "status": "IN_PROGRESS", 
-            "log": "[WEBHOOK] 🔄 GitHub interaction detected. Resuming remediation pipeline..."
+            "status": "FEEDBACK_RECEIVED", 
+            "log": "[WEBHOOK] 🔄 GitHub interaction detected. Human feedback received; queued for processing by priority."
         })
 
-        background_tasks.add_task(resume_agent_background, thread_id)
+        background_tasks.add_task(process_single_task)
         return {"status": "accepted"}
 
     return {"status": "ignored"}
@@ -782,7 +787,6 @@ async def get_system_state():
 
         vulns = [{"thread_id": v[0], "vuln_id": v[1], "score": v[2], "status": v[3], "asset_id": v[4]} for v in all_vulns]
 
-        # Smart Step Recovery: If server rebooted but DB has data, infer the step
         step = global_tracker.current_step
         if step == "Idle" and len(vulns) > 0:
             all_finished = all(v["status"] in ["RESOLVED", "FAILED"] for v in vulns)
@@ -792,28 +796,16 @@ async def get_system_state():
             "active_task": {"thread_id": active_row[0], "status": active_row[1]} if active_row else None,
             "metrics": {"pending": pending, "finished": finished, "total": total},
             "vulnerabilities": vulns,
-            "current_step": step,               # <-- Send current step
-            "recent_logs": global_tracker.logs  # <-- Send history of logs
+            "current_step": step,               
+            "recent_logs": global_tracker.logs  
         }
-        
-        
-# ==========================================
-# DASHBOARD REST ENDPOINT (PostgreSQL)
-# ==========================================
-# def format_mttr(td: timedelta) -> str:
-#     if not td: return "0m 0s"
-#     total_seconds = int(td.total_seconds())
-#     minutes, seconds = divmod(total_seconds, 60)
-#     return f"{minutes}m {seconds}s"
 
 def format_mttr(time_taken) -> str:
     if not time_taken: 
         return "0m 0s"
     
-    # If asyncpg returns a timedelta object (from PSQL INTERVAL)
     if isinstance(time_taken, timedelta):
         total_seconds = int(time_taken.total_seconds())
-    # Fallback if it returns a raw float or integer
     else:
         total_seconds = int(time_taken)
         
@@ -846,15 +838,7 @@ async def get_dashboard_data(request: Request):
             total_solved = int(kpi_row['total_solved'] or 0)
             pending_vulns = int(kpi_row['pending_vulns'] or 0)
             total_vulns = int(kpi_row['total_vulns'] or 0)
-            success_rate = (
-                round((total_solved / total_vulns) * 100, 1)
-                if total_vulns > 0 else 0
-            )
-
-            avg_tokens = (
-                int(kpi_row['total_tokens'] or 0) / total_solved
-                if total_solved > 0 else 0
-            )
+            success_rate = round((total_solved / total_vulns) * 100, 1) if total_vulns > 0 else 0
 
             severities_rows = await conn.fetch("SELECT score FROM vulnerabilities_history ")
             severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
@@ -899,7 +883,6 @@ async def get_dashboard_data(request: Request):
                     "status": "Resolved" if r['resolved'] else "Unresolved",
                     "time": timestamp.strftime('%H:%M %p') if timestamp else "N/A"
                 })
-            
 
             return {
                 "kpis": {
@@ -907,7 +890,7 @@ async def get_dashboard_data(request: Request):
                     "avg_mttr": format_mttr(kpi_row['raw_avg_mttr']),
                     "total_vulns": total_vulns,
                     "total_solved": total_solved,
-                    "total_tokens": avg_tokens,
+                    "total_tokens": int(kpi_row['total_tokens'])/total_solved if total_solved > 0 else 0,
                     "success_rate": success_rate,
                     "pending_vulns": pending_vulns
                 },
@@ -918,22 +901,3 @@ async def get_dashboard_data(request: Request):
     except Exception as e:
         print(f"[API ERROR] Dashboard Data: {str(e)}")
         return {"error": str(e)}
-
-    
-    
-# if __name__ == "__main__":
-#     import uvicorn
-
-#     uvicorn.run(
-#         "main:app",
-#         reload=True,
-#         reload_excludes=[
-#             "normalized_output/*",
-#             "parsed_csvs/*",
-#             "raw_scanner_outputs/*",
-#             "uploaded_files/*",
-#             "generated_normalization_func.py",
-#             "state_db.sqlite",
-#             "agents/*"
-#         ]
-#     )
