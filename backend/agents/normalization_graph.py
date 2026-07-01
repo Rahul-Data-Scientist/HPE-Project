@@ -205,6 +205,51 @@ async def merge_normalized_csvs(state: NormalizationState):
     
     df_list = [pd.read_csv(f) for f in normalized_files]
     working_df = pd.concat(df_list, ignore_index=True)
+
+    # normalize dedup columns (remove nan, null etc into unified form)
+    for col in [
+        "vuln_id",
+        "instance_id",
+        "hostname",
+        "ip",
+        "component"
+    ]:
+        if col in working_df.columns:
+            working_df[col] = (
+                working_df[col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+
+    # remove duplicate asset-vulnerability findings with penta-uniqueness
+    dedup_cols = [
+        "vuln_id",
+        "instance_id",
+        "hostname",
+        "ip",
+        "component",
+    ]
+
+    existing_cols = [c for c in dedup_cols if c in working_df.columns]
+
+    before = len(working_df)
+
+    working_df = (
+        working_df
+        .drop_duplicates(
+            subset=existing_cols,
+            keep="first"
+        )
+        .reset_index(drop=True)
+    )
+
+    after = len(working_df)
+
+    print(
+        f"[Dedup] Removed {before-after} duplicate "
+        f"asset-vulnerability findings"
+    )
     
     output_path = os.path.join(target_dir, "working.csv")
     working_df.to_csv(output_path, index=False)
