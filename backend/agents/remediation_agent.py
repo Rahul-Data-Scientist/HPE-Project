@@ -163,6 +163,7 @@ class AgentState(MessagesState):
     new_review_ids: Optional[list] = []
     new_general_comment_ids: Optional[list] = []
     new_inline_comment_ids: Optional[list] = []
+    failure_report_url: Optional[str] = None
     
     # Jira Integration
     jira_issue_key: Optional[str] = None
@@ -591,16 +592,20 @@ async def check_ci_status(state: AgentState):
 async def route_after_ci(state: AgentState):
     ci_status = state["ci_status"]
     if ci_status == "failure":
-        retry_count = state.get("ci_retry_count", 0)
-        max_limit = state.get("ci_max_retry_limit", 2)
-
-        if retry_count >= max_limit:
-            print("[SYSTEM] 🛑 Maximum CI/CD retry limit reached. Halting automatic operations.")
-            return "failure(max_limit_reached)"
         return "failure"
-    return ci_status
+    return "success"
 
-async def fetch_and_purge_latest_logs(state: AgentState) -> Dict[str, Any]:
+async def route_after_failure(state: AgentState):
+    """Determines whether to retry remediation or terminate based on the retry budget."""
+    retry_count = state.get("ci_retry_count", 0)
+    max_limit = state.get("ci_max_retry_limit", 2)
+
+    if retry_count >= max_limit:
+        print("[SYSTEM] 🛑 Maximum CI/CD retry limit reached. Routing to terminal failure node.")
+        return "max_limit_reached"
+    return "retry"
+
+async def fetch_and_purge_latest_logs(state: AgentState, config: RunnableConfig) -> Dict[str, Any]:
     s3_client = boto3.client('s3')
     bucket_name = "remediation-logs-bucket" 
     raw_branch = state.get("branch_name", "")
@@ -621,20 +626,14 @@ async def fetch_and_purge_latest_logs(state: AgentState) -> Dict[str, Any]:
             
         all_objects = response['Contents']
         
-        # Helper to retrieve contents of the latest stdout/stderr for specific pipeline stages
         def get_log_content(stage_substring: str):
-            # 1. Isolate objects for this specific stage execution
             stage_objects = [obj for obj in all_objects if stage_substring in obj['Key']]
-            
-            # 2. Extract lists of stderr and stdout matches
             stderr_list = [obj for obj in stage_objects if obj['Key'].endswith('/stderr')]
             stdout_list = [obj for obj in stage_objects if obj['Key'].endswith('/stdout')]
 
-            # 3. Sort them chronologically descending (newest first)
             stderr_list.sort(key=lambda x: x['LastModified'], reverse=True)
             stdout_list.sort(key=lambda x: x['LastModified'], reverse=True)
 
-            # 4. Prefer the newest stderr file, fallback to the newest stdout file
             target = stderr_list[0] if stderr_list else (stdout_list[0] if stdout_list else None)
             
             if target:
@@ -644,7 +643,6 @@ async def fetch_and_purge_latest_logs(state: AgentState) -> Dict[str, Any]:
         
         print(f"[SYSTEM] 📥 Fetching multi-stage telemetry reports from cloud storage runway...")
 
-        # Gather telemetry maps from all stages
         pre_log = get_log_content("/precheck/")
         if pre_log: precheck_telemetry = pre_log
 
@@ -657,29 +655,74 @@ async def fetch_and_purge_latest_logs(state: AgentState) -> Dict[str, Any]:
     except Exception as e:
         return {"error_logs": f"S3 Harvesting Error: {str(e)}"}
 
-    # Format everything into a unified error context so the LLM knows exactly which stage failed
     unified_error_report = (
         f"=== STAGE 1: PRECHECK TELEMETRY STATE ===\n{precheck_telemetry}\n\n"
         f"=== STAGE 2: CORE REMEDIATION EXECUTION LOGS ===\n{remediation_telemetry}\n\n"
         f"=== STAGE 3: POST-REMEDIATION VALIDATION CHECKS ===\n{validation_telemetry}\n"
     )
 
-    # Purge historical tracking files to clear the workspace for retries
-    try:
-        objects_to_delete = [{'Key': obj['Key']} for obj in all_objects]
-        for i in range(0, len(objects_to_delete), 1000):
-            chunk = objects_to_delete[i:i + 1000]
-            s3_client.delete_objects(Bucket=bucket_name, Delete={'Objects': chunk})
-    except Exception as e:
-        return {"error_logs": f"{unified_error_report}\n\n[SYSTEM WARNING] S3 Purge Exception: {str(e)}"}
-
-    current_retry = state.get("ci_retry_count", 0) 
-    return {
+    current_retry = state.get("ci_retry_count", 0)
+    max_limit = state.get("ci_max_retry_limit", 2)
+    next_retry_count = current_retry + 1
+    
+    return_payload = {
         "error_logs": unified_error_report, 
         "precheck_logs": precheck_telemetry,
         "validation_logs": validation_telemetry,
-        "ci_retry_count": current_retry + 1
+        "ci_retry_count": next_retry_count
     }
+
+    # --- Desired behavior on final failure ---
+    if next_retry_count >= max_limit:
+        try:
+            thread_id = config["configurable"]["thread_id"]
+            failure_report = {
+                "thread_id": thread_id,
+                "branch": state["branch_name"],
+                "pr": state["pr_url"],
+                "retry_count": next_retry_count,
+                "generated_script": state["modified_file_content"],
+                "precheck_logs": precheck_telemetry,
+                "validation_logs": validation_telemetry,
+                "remediation_logs": remediation_telemetry,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            report_key = f"remediation-runs/{clean_branch}/final_failure_report.json"
+            print(f"[SYSTEM] 📤 Uploading consolidated failure report to S3: {report_key}")
+            
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=report_key,
+                Body=json.dumps(failure_report, indent=2),
+                ContentType="application/json"
+            )
+            
+            # Generate a presigned URL valid for 7 days (604800 seconds)
+            presigned_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': report_key},
+                ExpiresIn=604800
+            )
+            return_payload["failure_report_url"] = presigned_url
+
+        except Exception as e:
+            print(f"[ERROR] Failed to compile or upload terminal failure report: {str(e)}")
+
+    # Purge temporary logs while keeping the final report if it was created
+    try:
+        objects_to_delete = [
+            {'Key': obj['Key']} for obj in all_objects 
+            if not obj['Key'].endswith('final_failure_report.json')
+        ]
+        if objects_to_delete:
+            for i in range(0, len(objects_to_delete), 1000):
+                chunk = objects_to_delete[i:i + 1000]
+                s3_client.delete_objects(Bucket=bucket_name, Delete={'Objects': chunk})
+    except Exception as e:
+        return_payload["error_logs"] = f"{unified_error_report}\n\n[SYSTEM WARNING] S3 Purge Exception: {str(e)}"
+
+    return return_payload
 
 async def open_for_resume_request(state: AgentState, config: RunnableConfig):
     pr_number = state.get("pr_number")
@@ -1044,18 +1087,24 @@ async def jira_unresolved_node(state: AgentState) -> Dict[str, Any]:
     retry_count = state.get("ci_retry_count", 0)
     max_limit = state.get("ci_max_retry_limit", 2)
     pr_url = state.get("pr_url", "N/A")
+    report_url = state.get("failure_report_url")
 
-    if retry_count > max_limit:
+    if retry_count >= max_limit:
         failure_details = "Automated remediation workflow terminated: Maximum execution retry limit exceeded."
     else:
         failure_details = "Workflow cancelled: Pull Request was manually closed by a human reviewer."
     
     comment = (
         "Remediation workflow could not be completed.\n"
-        f"Failure details: {failure_details}\nPR URL:{pr_url}\n"
-        f"CI failure logs / exception details are attached in the workflow state."
+        f"Failure details: {failure_details}\nPR URL: {pr_url}\n"
     )
     
+    # Inject the presigned link if it exists
+    if report_url:
+        comment += f"Consolidated Failure Report (S3 Presigned URL): {report_url}\n"
+    else:
+        comment += "CI failure logs / exception details are attached in the workflow state.\n"
+
     # Run transition and comment concurrently
     transition_task = transition_jira_issue(issue_key, "UNRESOLVED")
     comment_task = add_jira_comment(issue_key, comment)
@@ -1121,11 +1170,13 @@ async def build_graph(checkpointer):
 
     
     graph.add_conditional_edges("check_ci_status", route_after_ci, {
-        "failure(max_limit_reached)": "mark_jira_ticket_unresolved", 
         "failure": "fetch_and_delete_error_logs",
         "success": "generate_evidence"
     })
-    graph.add_edge("fetch_and_delete_error_logs", "generate_remediation_script")
+    graph.add_conditional_edges("fetch_and_delete_error_logs", route_after_failure, {
+        "retry": "generate_remediation_script",
+        "max_limit_reached": "mark_jira_ticket_unresolved"
+    })
 
     
     graph.add_edge("generate_evidence", "open_for_resume_request")
